@@ -69,7 +69,7 @@ menu = st.sidebar.radio("เมนูหลัก", ["📦 สต๊อกวั
 # หน้า 1: สต๊อกวัสดุ
 # ==========================================
 if menu == "📦 สต๊อกวัสดุ":
-    st.header("📦 สต๊อกวัสดุคงเหลือ (Master Inventory)")
+    st.header("📦 SEAMAN-YACHT STORE")
     
     if not inventory_df.empty:
         if 'Min_Stock' not in inventory_df.columns:
