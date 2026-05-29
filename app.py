@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime
 import uuid
 from supabase import create_client, Client
-import io  # เพิ่มเครื่องมือสำหรับสร้างไฟล์ Excel
+import io
 
 st.set_page_config(page_title="Shipyard Inventory", layout="wide")
 
@@ -34,7 +34,6 @@ def load_transactions():
         st.error(f"🚨 แจ้งเตือนจาก Supabase (transaction_log): {e}")
         return pd.DataFrame()
 
-# --- ฟังก์ชันช่วยเหลือสำหรับแปลงข้อมูลเป็น Excel ---
 def to_excel(df):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
@@ -54,7 +53,7 @@ st.sidebar.title("🛥️ ระบบจัดการคลังอู่เ
 menu = st.sidebar.radio("เมนูหลัก", ["📦 สต๊อกสินค้าหลัก", "🛒 เบิก-รับของ (ตะกร้า)", "📝 ประวัติ & ยกเลิกรายการ (Void)"])
 
 # ==========================================
-# หน้า 1: สต๊อกสินค้าหลัก (อัปเดต: กรองโซน + โหลด Excel)
+# หน้า 1: สต๊อกสินค้าหลัก
 # ==========================================
 if menu == "📦 สต๊อกสินค้าหลัก":
     st.header("📦 สต๊อกสินค้าคงเหลือ (Master Inventory)")
@@ -135,7 +134,6 @@ if menu == "📦 สต๊อกสินค้าหลัก":
     st.subheader("📋 ตารางสต๊อกสินค้า")
     
     if not inventory_df.empty:
-        # เพิ่มระบบกรองตามโซนให้หน้าแรก
         all_zones_display = ["แสดงทุกโซน"] + sorted(list(inventory_df['Zone'].unique()))
         selected_zone_view = st.selectbox("📌 ค้นหาของตามโซน/ห้อง", all_zones_display)
         
@@ -146,16 +144,13 @@ if menu == "📦 สต๊อกสินค้าหลัก":
             view_inv_df = inventory_df[inventory_df['Zone'] == selected_zone_view]
             file_name_inv = f"Stock_{selected_zone_view}.xlsx"
 
-        # แปลงชื่อคอลัมน์เป็นไทย
         display_inv_df = view_inv_df.rename(columns={
             "Item_Code": "รหัสสินค้า", "Item_Name": "ชื่ออุปกรณ์", 
             "Zone": "โซน/หมวดหมู่", "Stock": "ยอดคงเหลือ"
         }).drop(columns=['id'], errors='ignore')
         
-        # แสดงตาราง
         st.dataframe(display_inv_df, use_container_width=True, hide_index=True)
         
-        # ปุ่มดาวน์โหลด Excel
         excel_data_inv = to_excel(display_inv_df)
         st.download_button(
             label="📥 ดาวน์โหลดไฟล์ Excel (ตารางสต๊อกนี้)", 
@@ -166,7 +161,7 @@ if menu == "📦 สต๊อกสินค้าหลัก":
         )
 
 # ==========================================
-# หน้า 2: ระบบเบิก-รับของ
+# หน้า 2: ระบบเบิก-รับของ (อัปเดตรันเลขบิล SMY_)
 # ==========================================
 elif menu == "🛒 เบิก-รับของ (ตะกร้า)":
     st.header("🛒 ฟอร์มทำรายการ & ตะกร้าพักของ")
@@ -176,7 +171,7 @@ elif menu == "🛒 เบิก-รับของ (ตะกร้า)":
         st.subheader("1. ข้อมูลบิล (ระบุครั้งเดียว)")
         with st.container(border=True):
             action = st.radio("ประเภท", ["เบิกออก", "รับเข้า"], horizontal=True)
-            worker = st.text_input("ชื่อผู้เบิก/ผู้รับ (พิมพ์ครั้งเดียว)")
+            worker = st.text_input("ชื่อผู้เบิก/ผู้รับ")
             boat_name = st.text_input("⚓ ชื่อเรือที่ปฏิบัติงาน (ใส่หรือไม่ใส่ก็ได้)") 
 
         st.subheader("2. เลือกอุปกรณ์ลงตะกร้า")
@@ -225,7 +220,16 @@ elif menu == "🛒 เบิก-รับของ (ตะกร้า)":
                     st.rerun()
             with col_b:
                 if st.button("💾 ยืนยันตัดสต๊อก 1 บิล (Commit)", type="primary"):
-                    bill_id = str(uuid.uuid4())[:6].upper()
+                    
+                    # --- ระบบรันเลขบิลอัตโนมัติ (SMY_0001) ---
+                    next_bill_num = 1
+                    if not transaction_df.empty:
+                        smy_rows = transaction_df[transaction_df['TxID'].str.startswith('SMY_', na=False)]
+                        if not smy_rows.empty:
+                            nums = smy_rows['TxID'].apply(lambda x: int(str(x).split('-')[0].replace('SMY_', '')) if '-' in str(x) else 0)
+                            next_bill_num = nums.max() + 1
+                    
+                    bill_id = f"SMY_{next_bill_num:04d}" # จะได้รหัสเช่น SMY_0001
                     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
                     for idx, row in enumerate(st.session_state.pending_cart):
@@ -233,7 +237,8 @@ elif menu == "🛒 เบิก-รับของ (ตะกร้า)":
                         new_stock = target_item['Stock'] - row['Qty'] if row['Action'] == "เบิกออก" else target_item['Stock'] + row['Qty']
                         
                         supabase.table("inventory_db").update({"Stock": int(new_stock)}).eq("Item_Code", target_item['Item_Code']).execute()
-                        item_txid = f"{bill_id}-{idx+1}" 
+                        
+                        item_txid = f"{bill_id}-{idx+1}" # รหัสชิ้นย่อย เช่น SMY_0001-1
 
                         supabase.table("transaction_log").insert({
                             "TxID": item_txid, "Timestamp": current_time, "Action": row['Action'],
@@ -242,11 +247,11 @@ elif menu == "🛒 เบิก-รับของ (ตะกร้า)":
                         }).execute()
                         
                     st.session_state.pending_cart = [] 
-                    st.success("✅ ตัดสต๊อกและบันทึกประวัติเรียบร้อยแล้ว!")
+                    st.success(f"✅ ตัดสต๊อกและบันทึกรหัสบิล {bill_id} เรียบร้อยแล้ว!")
                     st.rerun()
 
 # ==========================================
-# หน้า 3: ประวัติ (อัปเดต: เพิ่มปุ่มโหลด Excel)
+# หน้า 3: ประวัติ (อัปเดตระบบแยกลบทีละรายการ)
 # ==========================================
 elif menu == "📝 ประวัติ & ยกเลิกรายการ (Void)":
     st.header("📝 ประวัติทำรายการ & ยกเลิกบิล")
@@ -276,53 +281,69 @@ elif menu == "📝 ประวัติ & ยกเลิกรายการ 
             "Status": "สถานะ", "Boat_Name": "ชื่อเรือ"
         })
         
-        # แสดงตารางประวัติ
         st.dataframe(display_history_df, use_container_width=True, hide_index=True)
         
-        # ปุ่มดาวน์โหลด Excel ของประวัติที่กำลังแสดงอยู่
         excel_data_hist = to_excel(display_history_df)
         st.download_button(
             label="📥 ดาวน์โหลดไฟล์ Excel (ประวัติที่แสดงนี้)", 
-            data=excel_data_hist, 
-            file_name=file_name_hist, 
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            type="primary"
+            data=excel_data_hist, file_name=file_name_hist, 
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", type="primary"
         )
         
         st.markdown("---")
         
-        # ระบบยกเลิกบิลแบบกลุ่ม
+        # --- ระบบยกเลิกบิลแบบ 2 โหมด ---
         st.subheader("ดึงสต๊อกกลับ (Void Transaction)")
         valid_tx = display_df[display_df['Status'] == 'Completed'].copy()
         
         if not valid_tx.empty:
-            valid_tx['Bill_Group'] = valid_tx['TxID'].apply(lambda x: str(x).split('-')[0])
+            # ให้เลือกโหมดการยกเลิก
+            void_mode = st.radio("เลือกโหมดการยกเลิก", ["🗑️ ยกเลิกเฉพาะบางรายการ (ทีละชิ้น)", "⚠️ ยกเลิกแบบเหมาทั้งบิล (คืนสต๊อกทุกชิ้นในบิลนั้น)"], horizontal=True)
             
-            group_summary = valid_tx.groupby('Bill_Group').agg({
-                'Worker': 'first', 'Boat_Name': 'first', 'Item_Name': 'count'
-            }).reset_index()
+            if void_mode == "🗑️ ยกเลิกเฉพาะบางรายการ (ทีละชิ้น)":
+                def format_single(row):
+                    boat = row['Boat_Name'] if row['Boat_Name'] and row['Boat_Name'] != '-' else 'ไม่ระบุ'
+                    return f"{row['TxID']} | {row['Item_Name']} ({row['Qty']} ชิ้น) | เบิกโดย: {row['Worker']} | เรือ: {boat}"
 
-            def format_bill(row):
-                boat = row['Boat_Name'] if row['Boat_Name'] and row['Boat_Name'] != '-' else 'ไม่ระบุ'
-                return f"{row['Bill_Group']} | เบิกโดย: {row['Worker']} | เรือ: {boat} ({row['Item_Name']} รายการ)"
+                valid_tx['Display_Single'] = valid_tx.apply(format_single, axis=1)
 
-            group_summary['Display'] = group_summary.apply(format_bill, axis=1)
-
-            with st.form("void_form"):
-                tx_to_void_display = st.selectbox("เลือกบิลที่ต้องการยกเลิก (ระบบจะคืนสต๊อกทุกรายการในบิลนี้)", group_summary['Display'])
-                if st.form_submit_button("⚠️ ยืนยันการยกเลิกทั้งบิล"):
-                    
-                    selected_bill_group = tx_to_void_display.split(" | ")[0]
-                    tx_to_cancel = transaction_df[
-                        (transaction_df['TxID'].apply(lambda x: str(x).split('-')[0]) == selected_bill_group) & 
-                        (transaction_df['Status'] == 'Completed')
-                    ]
-                    
-                    for _, tx_data in tx_to_cancel.iterrows():
+                with st.form("void_single_form"):
+                    tx_to_void_display = st.selectbox("เลือกรายการที่ต้องการยกเลิก (คืนสต๊อกเฉพาะชิ้นนี้)", valid_tx['Display_Single'])
+                    if st.form_submit_button("ยืนยันการยกเลิกรายการนี้"):
+                        target_txid = tx_to_void_display.split(" | ")[0]
+                        tx_data = valid_tx[valid_tx['TxID'] == target_txid].iloc[0]
                         target_item = inventory_df[inventory_df['Item_Name'] == tx_data['Item_Name']].iloc[0]
+                        
                         new_stock = target_item['Stock'] + int(tx_data['Qty']) if tx_data['Action'] == "เบิกออก" else target_item['Stock'] - int(tx_data['Qty'])
                         supabase.table("inventory_db").update({"Stock": int(new_stock)}).eq("Item_Code", target_item['Item_Code']).execute()
-                        supabase.table("transaction_log").update({"Status": "Voided (ยกเลิก)"}).eq("TxID", tx_data['TxID']).execute()
+                        supabase.table("transaction_log").update({"Status": "Voided (ยกเลิก)"}).eq("TxID", target_txid).execute()
                         
-                    st.success(f"✅ ยกเลิกบิล {selected_bill_group} และคืนสต๊อกทั้งหมดเรียบร้อยแล้ว")
-                    st.rerun()
+                        st.success(f"✅ ยกเลิกรายการ {target_txid} และคืนสต๊อกเรียบร้อยแล้ว")
+                        st.rerun()
+
+            else:
+                valid_tx['Bill_Group'] = valid_tx['TxID'].apply(lambda x: str(x).split('-')[0])
+                group_summary = valid_tx.groupby('Bill_Group').agg({
+                    'Worker': 'first', 'Boat_Name': 'first', 'Item_Name': 'count'
+                }).reset_index()
+
+                def format_bulk(row):
+                    boat = row['Boat_Name'] if row['Boat_Name'] and row['Boat_Name'] != '-' else 'ไม่ระบุ'
+                    return f"{row['Bill_Group']} | เบิกโดย: {row['Worker']} | เรือ: {boat} (รวมทั้งหมด {row['Item_Name']} รายการในบิลนี้)"
+
+                group_summary['Display_Bulk'] = group_summary.apply(format_bulk, axis=1)
+
+                with st.form("void_bulk_form"):
+                    tx_to_void_display = st.selectbox("เลือกบิลที่ต้องการยกเลิก (คืนสต๊อกทุกรายการในบิลนี้)", group_summary['Display_Bulk'])
+                    if st.form_submit_button("⚠️ ยืนยันการยกเลิกทั้งบิล"):
+                        selected_bill_group = tx_to_void_display.split(" | ")[0]
+                        tx_to_cancel = valid_tx[valid_tx['Bill_Group'] == selected_bill_group]
+                        
+                        for _, tx_data in tx_to_cancel.iterrows():
+                            target_item = inventory_df[inventory_df['Item_Name'] == tx_data['Item_Name']].iloc[0]
+                            new_stock = target_item['Stock'] + int(tx_data['Qty']) if tx_data['Action'] == "เบิกออก" else target_item['Stock'] - int(tx_data['Qty'])
+                            supabase.table("inventory_db").update({"Stock": int(new_stock)}).eq("Item_Code", target_item['Item_Code']).execute()
+                            supabase.table("transaction_log").update({"Status": "Voided (ยกเลิก)"}).eq("TxID", tx_data['TxID']).execute()
+                            
+                        st.success(f"✅ ยกเลิกบิล {selected_bill_group} และคืนสต๊อกทั้งหมดเรียบร้อยแล้ว")
+                        st.rerun()
