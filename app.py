@@ -35,7 +35,6 @@ def load_transactions():
         st.error(f"🚨 แจ้งเตือนจาก Supabase (transaction_log): {e}")
         return pd.DataFrame()
 
-# โหลดข้อมูลจากตารางตะกร้าพักของโดยเฉพาะ
 def load_cart():
     try:
         res = supabase.table("cart_db").select("*").order("id").execute()
@@ -51,7 +50,7 @@ def to_excel(df):
 
 inventory_df = load_inventory()
 transaction_df = load_transactions()
-cart_df = load_cart() # โหลดตะกร้าจากฐานข้อมูล
+cart_df = load_cart()
 
 def change_page_inv(delta):
     st.session_state.page_inv += delta
@@ -66,15 +65,19 @@ st.sidebar.title("🛥️ ระบบจัดการคลังอู่เ
 menu = st.sidebar.radio("เมนูหลัก", ["📦 สต๊อกวัสดุ", "🛒 เบิก-รับของ (ตะกร้า)", "📝 ประวัติ & ยกเลิกรายการ (Void)"])
 
 # ==========================================
-# หน้า 1: สต๊อกวัสดุ
+# หน้า 1: สต๊อกวัสดุ (เพิ่มระบบหน่วยนับ)
 # ==========================================
 if menu == "📦 สต๊อกวัสดุ":
-    st.header("📦 SEAMAN-YACHT STORE")
+    st.header("📦 สต๊อกวัสดุคงเหลือ")
     
     if not inventory_df.empty:
         if 'Min_Stock' not in inventory_df.columns:
             inventory_df['Min_Stock'] = 0
+        if 'Unit' not in inventory_df.columns:
+            inventory_df['Unit'] = 'ชิ้น'
+            
         inventory_df['Min_Stock'] = inventory_df['Min_Stock'].fillna(0).astype(int)
+        inventory_df['Unit'] = inventory_df['Unit'].fillna('ชิ้น').astype(str)
         
         def get_status(row):
             if row['Stock'] <= 0:
@@ -90,9 +93,12 @@ if menu == "📦 สต๊อกวัสดุ":
             new_code = col1.text_input("รหัสวัสดุ (Item Code) *")
             new_name = col2.text_input("ชื่อวัสดุ/อุปกรณ์ (Item Name) *")
             
-            existing_zones = list(inventory_df['Zone'].unique()) if not inventory_df.empty else []
+            existing_zones = list(inventory_db['Zone'].unique()) if not inventory_df.empty else []
             selected_zone = col1.selectbox("เลือกโซนที่มีอยู่", existing_zones, index=None, placeholder="พิมพ์หรือเลือกโซน...")
             custom_zone = col1.text_input("➕ หรือ พิมพ์ชื่อโซนใหม่")
+            
+            # เพิ่มช่องกรอกหน่วยนับตรงนี้
+            new_unit = col2.text_input("หน่วยนับ (เช่น อัน, ใบ, เมตร, ลิตร, ปลอก) *", value="ชิ้น")
             
             col_s1, col_s2 = st.columns(2)
             new_stock = col_s1.number_input("จำนวนรับเข้าล็อตแรก (ใส่ 0 ถ้าแค่สร้างชื่อเตรียมไว้)", min_value=0, step=1)
@@ -102,8 +108,8 @@ if menu == "📦 สต๊อกวัสดุ":
             
             if submit_new:
                 final_zone = custom_zone.strip() if custom_zone.strip() != "" else selected_zone
-                if not new_code or not new_name or not final_zone:
-                    st.error("❌ กรุณากรอกรหัสวัสดุ ชื่อวัสดุ และโซนให้ครบถ้วน")
+                if not new_code or not new_name or not final_zone or not new_unit.strip():
+                    st.error("❌ กรุณากรอกรหัสวัสดุ ชื่อวัสดุ โซน และหน่วยนับให้ครบถ้วน")
                 elif not inventory_df.empty and new_code in inventory_df['Item_Code'].values:
                     st.error(f"❌ รหัสวัสดุ '{new_code}' มีในระบบแล้ว")
                 elif not inventory_df.empty and new_name in inventory_df['Item_Name'].values:
@@ -112,7 +118,7 @@ if menu == "📦 สต๊อกวัสดุ":
                     try:
                         supabase.table("inventory_db").insert({
                             "Item_Code": new_code, "Item_Name": new_name, "Zone": final_zone, 
-                            "Stock": int(new_stock), "Min_Stock": int(new_min_stock)
+                            "Stock": int(new_stock), "Min_Stock": int(new_min_stock), "Unit": new_unit.strip()
                         }).execute()
                         st.success(f"✅ เพิ่มทะเบียน '{new_name}' เรียบร้อยแล้ว!")
                         st.rerun()
@@ -139,6 +145,9 @@ if menu == "📦 สต๊อกวัสดุ":
                         zone_idx = existing_zones_edit.index(target_row['Zone']) if target_row['Zone'] in existing_zones_edit else 0
                         edit_zone = col1.selectbox("โซน/หมวดหมู่", existing_zones_edit, index=zone_idx)
                         
+                        # ช่องแก้ไขหน่วยนับ
+                        edit_unit = col2.text_input("หน่วยนับ", value=target_row.get('Unit', 'ชิ้น'))
+                        
                         col_s1, col_s2 = st.columns(2)
                         edit_stock = col_s1.number_input("ยอดสต๊อก (ปัจจุบัน)", value=int(target_row['Stock']), min_value=0, step=1)
                         edit_min_stock = col_s2.number_input("สต๊อกขั้นต่ำ", value=int(target_row.get('Min_Stock', 0)), min_value=0, step=1)
@@ -147,7 +156,7 @@ if menu == "📦 สต๊อกวัสดุ":
                             try:
                                 supabase.table("inventory_db").update({
                                     "Item_Code": edit_code, "Item_Name": edit_name, "Zone": edit_zone, 
-                                    "Stock": edit_stock, "Min_Stock": edit_min_stock
+                                    "Stock": edit_stock, "Min_Stock": edit_min_stock, "Unit": edit_unit.strip()
                                 }).eq("id", target_id).execute()
                                 st.success("✅ อัปเดตข้อมูลเรียบร้อยแล้ว!")
                                 st.rerun()
@@ -209,12 +218,13 @@ if menu == "📦 สต๊อกวัสดุ":
             view_inv_df = filtered_by_status[filtered_by_status['Zone'] == selected_zone_view]
             file_name_inv = f"Stock_{selected_zone_view}.xlsx"
 
+        # เพิ่ม คอลัมน์ หน่วยนับ ในการแสดงผลตาราง
         display_inv_df = view_inv_df.rename(columns={
             "Status": "สถานะ", "Item_Code": "รหัสวัสดุ", "Item_Name": "ชื่อวัสดุ", 
-            "Zone": "โซน/หมวดหมู่", "Stock": "ยอดคงเหลือ", "Min_Stock": "ขั้นต่ำ"
+            "Zone": "โซน/หมวดหมู่", "Stock": "ยอดคงเหลือ", "Unit": "หน่วยนับ", "Min_Stock": "ขั้นต่ำ"
         }).drop(columns=['id'], errors='ignore')
         
-        cols = ["สถานะ", "รหัสวัสดุ", "ชื่อวัสดุ", "โซน/หมวดหมู่", "ยอดคงเหลือ", "ขั้นต่ำ"]
+        cols = ["สถานะ", "รหัสวัสดุ", "ชื่อวัสดุ", "โซน/หมวดหมู่", "ยอดคงเหลือ", "หน่วยนับ", "ขั้นต่ำ"]
         display_inv_df = display_inv_df[cols]
 
         total_rows = len(display_inv_df)
@@ -255,7 +265,7 @@ if menu == "📦 สต๊อกวัสดุ":
         )
 
 # ==========================================
-# หน้า 2: ระบบเบิก-รับของ (อัปเดตระบบตะกร้าฝังฐานข้อมูล)
+# หน้า 2: ระบบเบิก-รับของ
 # ==========================================
 elif menu == "🛒 เบิก-รับของ (ตะกร้า)":
     st.header("🛒 ฟอร์มทำรายการ & ตะกร้าพักของ")
@@ -289,7 +299,6 @@ elif menu == "🛒 เบิก-รับของ (ตะกร้า)":
                     if action == "เบิกออก" and qty > current_stock:
                         st.error(f"เบิกไม่ได้! {item} มีของในสต๊อกแค่ {current_stock}")
                     else:
-                        # บันทึกของลงตะกร้าใน Database เลย! (กันรีเฟรชหาย)
                         try:
                             supabase.table("cart_db").insert({
                                 "Action": action, "Item_Name": item, "Qty": int(qty), 
@@ -305,7 +314,6 @@ elif menu == "🛒 เบิก-รับของ (ตะกร้า)":
         if cart_df.empty:
             st.info("ยังไม่มีรายการในตะกร้า")
         else:
-            # ดึงข้อมูลจาก Database มาแสดง
             display_cart_df = cart_df.rename(columns={
                 "Action": "ประเภท", "Item_Name": "ชื่อวัสดุ", "Qty": "จำนวน", 
                 "Worker": "ผู้เบิก/รับ", "Boat_Name": "ชื่อเรือ"
@@ -316,7 +324,6 @@ elif menu == "🛒 เบิก-รับของ (ตะกร้า)":
             col_a, col_b = st.columns(2)
             with col_a:
                 if st.button("🗑️ ล้างตะกร้าทั้งหมด", type="secondary"):
-                    # ลบข้อมูลใน cart_db ทั้งหมด
                     supabase.table("cart_db").delete().gte("id", 0).execute()
                     st.rerun()
             with col_b:
@@ -332,7 +339,6 @@ elif menu == "🛒 เบิก-รับของ (ตะกร้า)":
                     tz_th = timezone(timedelta(hours=7))
                     current_time = datetime.now(tz_th).strftime("%Y-%m-%d %H:%M:%S")
 
-                    # ดึงของจาก Database มาตัดสต๊อกทีละชิ้น
                     for idx, row in cart_df.iterrows():
                         target_item = inventory_df[inventory_df['Item_Name'] == row['Item_Name']].iloc[0]
                         new_stock = target_item['Stock'] - row['Qty'] if row['Action'] == "เบิกออก" else target_item['Stock'] + row['Qty']
@@ -346,9 +352,7 @@ elif menu == "🛒 เบิก-รับของ (ตะกร้า)":
                             "Worker": row['Worker'], "Boat_Name": row['Boat_Name'], "Status": "Completed"
                         }).execute()
                         
-                    # เมื่อ Commit เสร็จ ให้ล้างตะกร้าทิ้ง
                     supabase.table("cart_db").delete().gte("id", 0).execute()
-                    
                     st.success(f"✅ ตัดสต๊อกและบันทึกรหัสบิล {bill_id} เรียบร้อยแล้ว!")
                     st.rerun()
 
@@ -463,7 +467,7 @@ elif menu == "📝 ประวัติ & ยกเลิกรายการ 
                         tx_to_void_display = st.selectbox("เลือกบิล", group_summary['Display_Bulk'], index=None, placeholder="🔍 พิมพ์รหัสบิล หรือ ชื่อคนเบิก...")
                         if st.form_submit_button("ยกเลิกทั้งบิล"):
                             if not tx_to_void_display:
-                                st.error("❌ กรุณาเลือกบิลก่อนกดตกลง")
+                                East.error("❌ กรุณาเลือกบิลก่อนกดตกลง")
                             else:
                                 selected_bill_group = tx_to_void_display.split(" | ")[0]
                                 tx_to_cancel = valid_tx[valid_tx['Bill_Group'] == selected_bill_group]
