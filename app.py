@@ -65,7 +65,8 @@ if menu == "📦 สต๊อกสินค้าหลัก":
             new_name = col2.text_input("ชื่ออุปกรณ์ (Item Name) *")
             
             existing_zones = list(inventory_df['Zone'].unique()) if not inventory_df.empty else []
-            selected_zone = col1.selectbox("เลือกโซนที่มีอยู่", existing_zones)
+            # ปรับให้ช่องเลือกโซนว่างตอนเริ่มต้น
+            selected_zone = col1.selectbox("เลือกโซนที่มีอยู่", existing_zones, index=None, placeholder="พิมพ์หรือเลือกโซน...")
             custom_zone = col1.text_input("➕ หรือ พิมพ์ชื่อโซนใหม่")
             
             new_stock = col2.number_input("จำนวนรับเข้าล็อตแรก (ใส่ 0 ถ้าแค่สร้างชื่อเตรียมไว้)", min_value=0, step=1)
@@ -73,8 +74,8 @@ if menu == "📦 สต๊อกสินค้าหลัก":
             
             if submit_new:
                 final_zone = custom_zone.strip() if custom_zone.strip() != "" else selected_zone
-                if not new_code or not new_name:
-                    st.error("❌ กรุณากรอกรหัสสินค้าและชื่ออุปกรณ์ให้ครบถ้วน")
+                if not new_code or not new_name or not final_zone:
+                    st.error("❌ กรุณากรอกรหัสสินค้า ชื่ออุปกรณ์ และโซนให้ครบถ้วน")
                 elif not inventory_df.empty and new_code in inventory_df['Item_Code'].values:
                     st.error(f"❌ รหัสสินค้า '{new_code}' มีในระบบแล้ว")
                 elif not inventory_df.empty and new_name in inventory_df['Item_Name'].values:
@@ -93,7 +94,8 @@ if menu == "📦 สต๊อกสินค้าหลัก":
         if not inventory_df.empty:
             edit_action = st.radio("เลือกโหมดการทำงาน", ["✏️ แก้ไขข้อมูล", "🗑️ ลบสินค้า"], horizontal=True)
             item_list = sorted(inventory_df['Item_Name'].tolist())
-            selected_edit_item = st.selectbox("ค้นหาสินค้าที่ต้องการจัดการ", item_list, index=None, placeholder="🔍 พิมพ์หรือเลือกชื่ออุปกรณ์...")
+            # ปรับให้พิมพ์ค้นหาได้ทันที
+            selected_edit_item = st.selectbox("ค้นหาสินค้าที่ต้องการจัดการ", item_list, index=None, placeholder="🔍 พิมพ์ชื่ออุปกรณ์...")
             
             if selected_edit_item:
                 target_row = inventory_df[inventory_df['Item_Name'] == selected_edit_item].iloc[0]
@@ -135,9 +137,10 @@ if menu == "📦 สต๊อกสินค้าหลัก":
     
     if not inventory_df.empty:
         all_zones_display = ["แสดงทุกโซน"] + sorted(list(inventory_df['Zone'].unique()))
-        selected_zone_view = st.selectbox("📌 ค้นหาของตามโซน/ห้อง", all_zones_display)
+        # ปรับให้เริ่มด้วยช่องว่าง (ถ้าว่างแปลว่าแสดงทั้งหมด)
+        selected_zone_view = st.selectbox("📌 ค้นหาของตามโซน/ห้อง", all_zones_display, index=None, placeholder="🔍 พิมพ์โซนที่ต้องการ (เว้นว่าง = ดูทั้งหมด)")
         
-        if selected_zone_view == "แสดงทุกโซน":
+        if not selected_zone_view or selected_zone_view == "แสดงทุกโซน":
             view_inv_df = inventory_df
             file_name_inv = "Stock_All_Zones.xlsx"
         else:
@@ -176,15 +179,16 @@ elif menu == "🛒 เบิก-รับของ (ตะกร้า)":
 
         st.subheader("2. เลือกอุปกรณ์ลงตะกร้า")
         all_zones = ["แสดงทุกโซน"] + list(inventory_df['Zone'].unique()) if not inventory_df.empty else ["แสดงทุกโซน"]
-        selected_zone_filter = st.selectbox("📌 กรองตามโซน (หมวดหมู่)", all_zones)
+        # ปรับให้เริ่มด้วยช่องว่างพิมพ์หาได้เลย
+        selected_zone_filter = st.selectbox("📌 กรองตามโซน (หมวดหมู่)", all_zones, index=None, placeholder="🔍 พิมพ์โซน (เว้นว่าง = ค้นหาจากทุกโซน)")
         
-        if selected_zone_filter == "แสดงทุกโซน":
+        if not selected_zone_filter or selected_zone_filter == "แสดงทุกโซน":
             filtered_items = inventory_df['Item_Name'] if not inventory_df.empty else []
         else:
             filtered_items = inventory_df[inventory_df['Zone'] == selected_zone_filter]['Item_Name']
 
         with st.form("add_to_cart_form", clear_on_submit=True):
-            item = st.selectbox("เลือกอุปกรณ์", filtered_items, index=None, placeholder="🔍 พิมพ์ค้นหา...")
+            item = st.selectbox("เลือกอุปกรณ์", filtered_items, index=None, placeholder="🔍 พิมพ์ค้นหาอุปกรณ์...")
             qty = st.number_input("จำนวน", min_value=1, step=1)
             
             if st.form_submit_button("➕ เพิ่มลงตะกร้า"):
@@ -220,7 +224,6 @@ elif menu == "🛒 เบิก-รับของ (ตะกร้า)":
                     st.rerun()
             with col_b:
                 if st.button("💾 ยืนยันตัดสต๊อก 1 บิล (Commit)", type="primary"):
-                    
                     next_bill_num = 1
                     if not transaction_df.empty:
                         smy_rows = transaction_df[transaction_df['TxID'].str.startswith('SMY_', na=False)]
@@ -249,7 +252,7 @@ elif menu == "🛒 เบิก-รับของ (ตะกร้า)":
                     st.rerun()
 
 # ==========================================
-# หน้า 3: ประวัติ (เพิ่มปุ่มลบถาวร & ซ่อนบิล Void)
+# หน้า 3: ประวัติ (ยกเลิกและลบถาวร)
 # ==========================================
 elif menu == "📝 ประวัติ & ยกเลิกรายการ (Void)":
     st.header("📝 ประวัติทำรายการ & ยกเลิกบิล")
@@ -257,13 +260,13 @@ elif menu == "📝 ประวัติ & ยกเลิกรายการ 
     if transaction_df.empty:
         st.info("ยังไม่มีประวัติการทำรายการ")
     else:
-        # ฟิลเตอร์กรองตามชื่อเรือ
         if 'Boat_Name' in transaction_df.columns:
             unique_boats = [b for b in transaction_df['Boat_Name'].unique() if pd.notna(b) and b != "-"]
             all_boat_options = ["📋 ดูประวัติทั้งหมด"] + unique_boats
-            selected_boat_filter = st.selectbox("⚓ ค้นหาประวัติการเบิกตามชื่อเรือ", all_boat_options)
+            # ปรับให้ค้นหาชื่อเรือโดยการพิมพ์ได้เลย
+            selected_boat_filter = st.selectbox("⚓ ค้นหาประวัติการเบิกตามชื่อเรือ", all_boat_options, index=None, placeholder="🔍 พิมพ์ชื่อเรือ (เว้นว่าง = ดูทั้งหมด)")
             
-            if selected_boat_filter == "📋 ดูประวัติทั้งหมด":
+            if not selected_boat_filter or selected_boat_filter == "📋 ดูประวัติทั้งหมด":
                 base_df = transaction_df
                 file_name_hist = "History_All_Boats.xlsx"
             else:
@@ -273,7 +276,6 @@ elif menu == "📝 ประวัติ & ยกเลิกรายการ 
             base_df = transaction_df 
             file_name_hist = "History_All.xlsx"
             
-        # สวิตช์เปิด-ปิด การซ่อนบิลที่ยกเลิกแล้ว
         hide_voided = st.checkbox("👁️ ซ่อนรายการที่ยกเลิกไปแล้ว (Voided) จากตารางด้านล่าง", value=True)
         
         display_df = base_df.copy()
@@ -297,11 +299,10 @@ elif menu == "📝 ประวัติ & ยกเลิกรายการ 
         
         st.markdown("---")
         
-        # --- แบ่งเป็น 2 คอลัมน์: ยกเลิก(คืนสต๊อก) vs ลบทิ้งถาวร ---
         col1, col2 = st.columns(2)
         
         with col1:
-            st.subheader("⚠️ ดึงสต๊อกกลับ (Void Transaction)")
+            st.subheader("⚠️ ดึงสต๊อกกลับ (Void)")
             st.caption("สถานะจะเปลี่ยนเป็นยกเลิก และของจะเด้งกลับเข้าคลัง")
             valid_tx = base_df[base_df['Status'] == 'Completed'].copy()
             
@@ -311,18 +312,22 @@ elif menu == "📝 ประวัติ & ยกเลิกรายการ 
                 if void_mode == "ทีละชิ้น":
                     valid_tx['Display_Single'] = valid_tx.apply(lambda row: f"{row['TxID']} | {row['Item_Name']} ({row['Qty']} ชิ้น)", axis=1)
                     with st.form("void_single_form"):
-                        tx_to_void_display = st.selectbox("เลือกรายการ", valid_tx['Display_Single'])
+                        # พิมพ์ค้นหาได้เลย
+                        tx_to_void_display = st.selectbox("เลือกรายการ", valid_tx['Display_Single'], index=None, placeholder="🔍 พิมพ์รหัสบิล หรือ อุปกรณ์...")
                         if st.form_submit_button("ยกเลิกรายการนี้"):
-                            target_txid = tx_to_void_display.split(" | ")[0]
-                            tx_data = valid_tx[valid_tx['TxID'] == target_txid].iloc[0]
-                            target_item = inventory_df[inventory_df['Item_Name'] == tx_data['Item_Name']].iloc[0]
-                            
-                            new_stock = target_item['Stock'] + int(tx_data['Qty']) if tx_data['Action'] == "เบิกออก" else target_item['Stock'] - int(tx_data['Qty'])
-                            supabase.table("inventory_db").update({"Stock": int(new_stock)}).eq("Item_Code", target_item['Item_Code']).execute()
-                            supabase.table("transaction_log").update({"Status": "Voided (ยกเลิก)"}).eq("TxID", target_txid).execute()
-                            
-                            st.success(f"✅ ยกเลิกรายการ {target_txid} และคืนสต๊อกเรียบร้อย")
-                            st.rerun()
+                            if not tx_to_void_display:
+                                st.error("❌ กรุณาเลือกรายการก่อนกดตกลง")
+                            else:
+                                target_txid = tx_to_void_display.split(" | ")[0]
+                                tx_data = valid_tx[valid_tx['TxID'] == target_txid].iloc[0]
+                                target_item = inventory_df[inventory_df['Item_Name'] == tx_data['Item_Name']].iloc[0]
+                                
+                                new_stock = target_item['Stock'] + int(tx_data['Qty']) if tx_data['Action'] == "เบิกออก" else target_item['Stock'] - int(tx_data['Qty'])
+                                supabase.table("inventory_db").update({"Stock": int(new_stock)}).eq("Item_Code", target_item['Item_Code']).execute()
+                                supabase.table("transaction_log").update({"Status": "Voided (ยกเลิก)"}).eq("TxID", target_txid).execute()
+                                
+                                st.success(f"✅ ยกเลิกรายการ {target_txid} และคืนสต๊อกเรียบร้อย")
+                                st.rerun()
 
                 else:
                     valid_tx['Bill_Group'] = valid_tx['TxID'].apply(lambda x: str(x).split('-')[0])
@@ -330,33 +335,38 @@ elif menu == "📝 ประวัติ & ยกเลิกรายการ 
                     group_summary['Display_Bulk'] = group_summary.apply(lambda row: f"{row['Bill_Group']} | โดย: {row['Worker']} ({row['Item_Name']} รายการ)", axis=1)
 
                     with st.form("void_bulk_form"):
-                        tx_to_void_display = st.selectbox("เลือกบิล", group_summary['Display_Bulk'])
+                        # พิมพ์ค้นหาได้เลย
+                        tx_to_void_display = st.selectbox("เลือกบิล", group_summary['Display_Bulk'], index=None, placeholder="🔍 พิมพ์รหัสบิล หรือ ชื่อคนเบิก...")
                         if st.form_submit_button("ยกเลิกทั้งบิล"):
-                            selected_bill_group = tx_to_void_display.split(" | ")[0]
-                            tx_to_cancel = valid_tx[valid_tx['Bill_Group'] == selected_bill_group]
-                            
-                            for _, tx_data in tx_to_cancel.iterrows():
-                                target_item = inventory_df[inventory_df['Item_Name'] == tx_data['Item_Name']].iloc[0]
-                                new_stock = target_item['Stock'] + int(tx_data['Qty']) if tx_data['Action'] == "เบิกออก" else target_item['Stock'] - int(tx_data['Qty'])
-                                supabase.table("inventory_db").update({"Stock": int(new_stock)}).eq("Item_Code", target_item['Item_Code']).execute()
-                                supabase.table("transaction_log").update({"Status": "Voided (ยกเลิก)"}).eq("TxID", tx_data['TxID']).execute()
+                            if not tx_to_void_display:
+                                st.error("❌ กรุณาเลือกบิลก่อนกดตกลง")
+                            else:
+                                selected_bill_group = tx_to_void_display.split(" | ")[0]
+                                tx_to_cancel = valid_tx[valid_tx['Bill_Group'] == selected_bill_group]
                                 
-                            st.success(f"✅ ยกเลิกบิล {selected_bill_group} เรียบร้อย")
-                            st.rerun()
+                                for _, tx_data in tx_to_cancel.iterrows():
+                                    target_item = inventory_df[inventory_df['Item_Name'] == tx_data['Item_Name']].iloc[0]
+                                    new_stock = target_item['Stock'] + int(tx_data['Qty']) if tx_data['Action'] == "เบิกออก" else target_item['Stock'] - int(tx_data['Qty'])
+                                    supabase.table("inventory_db").update({"Stock": int(new_stock)}).eq("Item_Code", target_item['Item_Code']).execute()
+                                    supabase.table("transaction_log").update({"Status": "Voided (ยกเลิก)"}).eq("TxID", tx_data['TxID']).execute()
+                                    
+                                st.success(f"✅ ยกเลิกบิล {selected_bill_group} เรียบร้อย")
+                                st.rerun()
 
         with col2:
             st.subheader("🗑️ ลบประวัติถาวร (Hard Delete)")
             st.caption("ลบหายไปจากระบบ (ไม่ดึงสต๊อกกลับ ใช้สำหรับลบขยะ)")
             
-            # ดึงข้อมูลมาโชว์ในกล่องลบถาวร (แสดงทั้งบิลปกติและบิล Void)
             base_df['Display_Del'] = base_df.apply(lambda row: f"{row['TxID']} | {row['Item_Name']} | {row['Status']}", axis=1)
             
             with st.form("hard_delete_form"):
-                tx_to_delete = st.selectbox("เลือกประวัติที่ต้องการลบทิ้ง", base_df['Display_Del'])
+                # พิมพ์ค้นหาได้เลย
+                tx_to_delete = st.selectbox("เลือกประวัติที่ต้องการลบทิ้ง", base_df['Display_Del'], index=None, placeholder="🔍 พิมพ์รหัสบิล หรือ ชื่ออุปกรณ์...")
                 if st.form_submit_button("❌ ลบทิ้งถาวร"):
-                    target_txid = tx_to_delete.split(" | ")[0]
-                    # ยิงคำสั่ง Delete ไปที่ Supabase
-                    supabase.table("transaction_log").delete().eq("TxID", target_txid).execute()
-                    
-                    st.success(f"✅ ลบประวัติ {target_txid} ออกจากระบบถาวรแล้ว!")
-                    st.rerun()
+                    if not tx_to_delete:
+                        st.error("❌ กรุณาเลือกรายการก่อนกดตกลง")
+                    else:
+                        target_txid = tx_to_delete.split(" | ")[0]
+                        supabase.table("transaction_log").delete().eq("TxID", target_txid).execute()
+                        st.success(f"✅ ลบประวัติ {target_txid} ออกจากระบบถาวรแล้ว!")
+                        st.rerun()
