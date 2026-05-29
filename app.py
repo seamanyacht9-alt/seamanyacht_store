@@ -65,7 +65,7 @@ st.sidebar.title("🛥️ ระบบจัดการคลังอู่เ
 menu = st.sidebar.radio("เมนูหลัก", ["📦 สต๊อกวัสดุ", "🛒 เบิก-รับของ (ตะกร้า)", "📝 ประวัติ & ยกเลิกรายการ (Void)"])
 
 # ==========================================
-# หน้า 1: สต๊อกวัสดุ (เพิ่มระบบหน่วยนับ)
+# หน้า 1: สต๊อกวัสดุ
 # ==========================================
 if menu == "📦 สต๊อกวัสดุ":
     st.header("📦 สต๊อกวัสดุคงเหลือ")
@@ -93,11 +93,11 @@ if menu == "📦 สต๊อกวัสดุ":
             new_code = col1.text_input("รหัสวัสดุ (Item Code) *")
             new_name = col2.text_input("ชื่อวัสดุ/อุปกรณ์ (Item Name) *")
             
-            existing_zones = list(inventory_db['Zone'].unique()) if not inventory_df.empty else []
+            # แก้ไขตรงนี้ให้ดึงจาก inventory_df ถูกต้องแล้วครับ
+            existing_zones = list(inventory_df['Zone'].unique()) if not inventory_df.empty else []
             selected_zone = col1.selectbox("เลือกโซนที่มีอยู่", existing_zones, index=None, placeholder="พิมพ์หรือเลือกโซน...")
             custom_zone = col1.text_input("➕ หรือ พิมพ์ชื่อโซนใหม่")
             
-            # เพิ่มช่องกรอกหน่วยนับตรงนี้
             new_unit = col2.text_input("หน่วยนับ (เช่น อัน, ใบ, เมตร, ลิตร, ปลอก) *", value="ชิ้น")
             
             col_s1, col_s2 = st.columns(2)
@@ -145,7 +145,6 @@ if menu == "📦 สต๊อกวัสดุ":
                         zone_idx = existing_zones_edit.index(target_row['Zone']) if target_row['Zone'] in existing_zones_edit else 0
                         edit_zone = col1.selectbox("โซน/หมวดหมู่", existing_zones_edit, index=zone_idx)
                         
-                        # ช่องแก้ไขหน่วยนับ
                         edit_unit = col2.text_input("หน่วยนับ", value=target_row.get('Unit', 'ชิ้น'))
                         
                         col_s1, col_s2 = st.columns(2)
@@ -218,7 +217,6 @@ if menu == "📦 สต๊อกวัสดุ":
             view_inv_df = filtered_by_status[filtered_by_status['Zone'] == selected_zone_view]
             file_name_inv = f"Stock_{selected_zone_view}.xlsx"
 
-        # เพิ่ม คอลัมน์ หน่วยนับ ในการแสดงผลตาราง
         display_inv_df = view_inv_df.rename(columns={
             "Status": "สถานะ", "Item_Code": "รหัสวัสดุ", "Item_Name": "ชื่อวัสดุ", 
             "Zone": "โซน/หมวดหมู่", "Stock": "ยอดคงเหลือ", "Unit": "หน่วยนับ", "Min_Stock": "ขั้นต่ำ"
@@ -467,7 +465,7 @@ elif menu == "📝 ประวัติ & ยกเลิกรายการ 
                         tx_to_void_display = st.selectbox("เลือกบิล", group_summary['Display_Bulk'], index=None, placeholder="🔍 พิมพ์รหัสบิล หรือ ชื่อคนเบิก...")
                         if st.form_submit_button("ยกเลิกทั้งบิล"):
                             if not tx_to_void_display:
-                                East.error("❌ กรุณาเลือกบิลก่อนกดตกลง")
+                                st.error("❌ กรุณาเลือกบิลก่อนกดตกลง")
                             else:
                                 selected_bill_group = tx_to_void_display.split(" | ")[0]
                                 tx_to_cancel = valid_tx[valid_tx['Bill_Group'] == selected_bill_group]
