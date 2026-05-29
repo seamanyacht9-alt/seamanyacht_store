@@ -72,11 +72,20 @@ def change_page_inv(delta):
 def change_page_hist(delta):
     st.session_state.page_hist += delta
 
+def change_page_po_hist(delta):
+    st.session_state.page_po_hist += delta
+
 # ==========================================
-# เมนูด้านข้าง
+# เมนูด้านข้าง (แยกเมนูประวัติจัดซื้อออกมาแล้ว)
 # ==========================================
 st.sidebar.title("🛥️ ระบบจัดการอู่เรือ")
-menu = st.sidebar.radio("เมนูหลัก", ["📦 สต๊อกวัสดุ", "🛒 เบิก-รับของ (หน้างาน)", "📋 ระบบจัดซื้อ (PO)", "📝 ประวัติ & ยกเลิกรายการ"])
+menu = st.sidebar.radio("เมนูหลัก", [
+    "📦 สต๊อกวัสดุ", 
+    "🛒 เบิก-รับของ (หน้างาน)", 
+    "📋 ระบบจัดซื้อ (PO)", 
+    "📝 ประวัติ & ยกเลิกรายการ",
+    "📊 ประวัติการจัดซื้อ"
+])
 
 # ==========================================
 # หน้า 1: สต๊อกวัสดุ
@@ -366,7 +375,7 @@ elif menu == "🛒 เบิก-รับของ (หน้างาน)":
                     st.rerun()
 
 # ==========================================
-# หน้า 3: ระบบจัดซื้อ (PO) ---> ใหม่ล่าสุด!
+# หน้า 3: ระบบจัดซื้อ (PO) 
 # ==========================================
 elif menu == "📋 ระบบจัดซื้อ (PO)":
     st.header("📋 ระบบออกใบขอซื้อ / ใบสั่งซื้อ (PO)")
@@ -464,7 +473,7 @@ elif menu == "📋 ระบบจัดซื้อ (PO)":
                     st.rerun()
 
 # ==========================================
-# หน้า 4: ประวัติ & ยกเลิก
+# หน้า 4: ประวัติ & ยกเลิกรายการ (ของเบิก-รับงาน)
 # ==========================================
 elif menu == "📝 ประวัติ & ยกเลิกรายการ":
     st.header("📝 ประวัติเบิก-รับของ & ยกเลิกบิล")
@@ -604,3 +613,58 @@ elif menu == "📝 ประวัติ & ยกเลิกรายการ"
                         supabase.table("transaction_log").delete().eq("TxID", target_txid).execute()
                         st.success(f"✅ ลบประวัติ {target_txid} ออกจากระบบถาวรแล้ว!")
                         st.rerun()
+
+# ==========================================
+# หน้า 5: ประวัติการจัดซื้อ (PO History) ---> โค้ดส่วนที่เพิ่มมาใหม่
+# ==========================================
+elif menu == "📊 ประวัติการจัดซื้อ":
+    st.header("📊 ประวัติใบสั่งซื้อ (PO History)")
+    
+    if po_log_df.empty:
+        st.info("ยังไม่มีประวัติการจัดซื้อในระบบ")
+    else:
+        display_po_df = po_log_df.rename(columns={
+            "TxID": "รหัสรายการ", "PO_ID": "เลขที่ PO", "Timestamp": "วันเวลา", 
+            "Requester": "ผู้ขอซื้อ", "Item_Name": "รายการ", "Qty": "จำนวน", 
+            "Unit": "หน่วย", "Price_Per_Unit": "ราคา/หน่วย", 
+            "Discount": "ส่วนลด", "Shipping": "ค่าส่ง", 
+            "Net_Price": "ราคาสุทธิ", "Shop_Name": "ร้านค้า", "Status": "สถานะ"
+        })
+        
+        # ระบบแบ่งหน้า (Pagination) สำหรับหน้า PO History
+        total_po_rows = len(display_po_df)
+        total_po_pages = max(1, math.ceil(total_po_rows / 20))
+        
+        if 'page_po_hist' not in st.session_state:
+            st.session_state.page_po_hist = 1
+            
+        if st.session_state.page_po_hist > total_po_pages or st.session_state.page_po_hist < 1:
+            st.session_state.page_po_hist = 1
+
+        start_po_idx = (st.session_state.page_po_hist - 1) * 20
+        end_po_idx = start_po_idx + 20
+
+        st.dataframe(display_po_df.iloc[start_po_idx:end_po_idx], use_container_width=True, hide_index=True)
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        pg_p1, pg_p2, pg_p3 = st.columns([1, 2, 1])
+
+        with pg_p1:
+            st.button("⬅️ หน้าก่อนหน้า", on_click=change_page_po_hist, args=(-1,), disabled=(st.session_state.page_po_hist <= 1), use_container_width=True, key="prev_po_hist")
+        with pg_p2:
+            start_po_item = start_po_idx + 1 if total_po_rows > 0 else 0
+            end_po_item = min(end_po_idx, total_po_rows)
+            st.markdown(f"<div style='text-align: center; color: gray;'>แสดงรายการลำดับที่ {start_po_item} - {end_po_item} <br>(จากทั้งหมด {total_po_rows} รายการ)</div>", unsafe_allow_html=True)
+            st.selectbox("เลือกหน้า", range(1, total_po_pages + 1), key="page_po_hist", label_visibility="collapsed")
+        with pg_p3:
+            st.button("หน้าถัดไป ➡️", on_click=change_page_po_hist, args=(1,), disabled=(st.session_state.page_po_hist >= total_po_pages), use_container_width=True, key="next_po_hist")
+        st.markdown("---")
+        
+        excel_data_po = to_excel(display_po_df)
+        st.download_button(
+            label="📥 ดาวน์โหลดไฟล์ Excel (ประวัติจัดซื้อ)", 
+            data=excel_data_po, 
+            file_name="PO_History.xlsx", 
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
+            type="primary"
+        )
