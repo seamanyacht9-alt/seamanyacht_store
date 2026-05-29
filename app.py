@@ -35,6 +35,14 @@ def load_transactions():
         st.error(f"🚨 แจ้งเตือนจาก Supabase (transaction_log): {e}")
         return pd.DataFrame()
 
+# โหลดข้อมูลจากตารางตะกร้าพักของโดยเฉพาะ
+def load_cart():
+    try:
+        res = supabase.table("cart_db").select("*").order("id").execute()
+        return pd.DataFrame(res.data)
+    except Exception as e:
+        return pd.DataFrame()
+
 def to_excel(df):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
@@ -43,9 +51,7 @@ def to_excel(df):
 
 inventory_df = load_inventory()
 transaction_df = load_transactions()
-
-if 'pending_cart' not in st.session_state:
-    st.session_state.pending_cart = []
+cart_df = load_cart() # โหลดตะกร้าจากฐานข้อมูล
 
 def change_page_inv(delta):
     st.session_state.page_inv += delta
@@ -249,7 +255,7 @@ if menu == "📦 สต๊อกวัสดุ":
         )
 
 # ==========================================
-# หน้า 2: ระบบเบิก-รับของ
+# หน้า 2: ระบบเบิก-รับของ (อัปเดตระบบตะกร้าฝังฐานข้อมูล)
 # ==========================================
 elif menu == "🛒 เบิก-รับของ (ตะกร้า)":
     st.header("🛒 ฟอร์มทำรายการ & ตะกร้าพักของ")
@@ -283,28 +289,35 @@ elif menu == "🛒 เบิก-รับของ (ตะกร้า)":
                     if action == "เบิกออก" and qty > current_stock:
                         st.error(f"เบิกไม่ได้! {item} มีของในสต๊อกแค่ {current_stock}")
                     else:
-                        st.session_state.pending_cart.append({
-                            "Action": action, "Item_Name": item, "Qty": qty, 
-                            "Worker": worker, "Boat_Name": boat_name if boat_name else "-" 
-                        })
-                        st.success(f"✅ เพิ่ม {item} ลงตะกร้าแล้ว (เลือกชิ้นต่อไปต่อได้เลย)")
+                        # บันทึกของลงตะกร้าใน Database เลย! (กันรีเฟรชหาย)
+                        try:
+                            supabase.table("cart_db").insert({
+                                "Action": action, "Item_Name": item, "Qty": int(qty), 
+                                "Worker": worker, "Boat_Name": boat_name if boat_name else "-" 
+                            }).execute()
+                            st.success(f"✅ เพิ่ม {item} ลงตะกร้าแล้ว (รีเฟรชหน้าจอก็ไม่หาย!)")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"🚨 นำลงตะกร้าไม่สำเร็จ: {e}")
 
     with col2:
         st.subheader("3. ตะกร้าของวันนี้ (รอตัดสต๊อก)")
-        if not st.session_state.pending_cart:
+        if cart_df.empty:
             st.info("ยังไม่มีรายการในตะกร้า")
         else:
-            cart_df = pd.DataFrame(st.session_state.pending_cart)
+            # ดึงข้อมูลจาก Database มาแสดง
             display_cart_df = cart_df.rename(columns={
                 "Action": "ประเภท", "Item_Name": "ชื่อวัสดุ", "Qty": "จำนวน", 
                 "Worker": "ผู้เบิก/รับ", "Boat_Name": "ชื่อเรือ"
-            })
+            }).drop(columns=['id'])
+            
             st.dataframe(display_cart_df, use_container_width=True, hide_index=True)
             
             col_a, col_b = st.columns(2)
             with col_a:
                 if st.button("🗑️ ล้างตะกร้าทั้งหมด", type="secondary"):
-                    st.session_state.pending_cart = []
+                    # ลบข้อมูลใน cart_db ทั้งหมด
+                    supabase.table("cart_db").delete().gte("id", 0).execute()
                     st.rerun()
             with col_b:
                 if st.button("💾 ยืนยันตัดสต๊อก 1 บิล (Commit)", type="primary"):
@@ -316,12 +329,11 @@ elif menu == "🛒 เบิก-รับของ (ตะกร้า)":
                             next_bill_num = nums.max() + 1
                     
                     bill_id = f"SMY_{next_bill_num:04d}" 
-                    
-                    # --- แก้ไขเวลาให้เป็นโซนประเทศไทย (UTC+7) ---
                     tz_th = timezone(timedelta(hours=7))
                     current_time = datetime.now(tz_th).strftime("%Y-%m-%d %H:%M:%S")
 
-                    for idx, row in enumerate(st.session_state.pending_cart):
+                    # ดึงของจาก Database มาตัดสต๊อกทีละชิ้น
+                    for idx, row in cart_df.iterrows():
                         target_item = inventory_df[inventory_df['Item_Name'] == row['Item_Name']].iloc[0]
                         new_stock = target_item['Stock'] - row['Qty'] if row['Action'] == "เบิกออก" else target_item['Stock'] + row['Qty']
                         
@@ -334,7 +346,9 @@ elif menu == "🛒 เบิก-รับของ (ตะกร้า)":
                             "Worker": row['Worker'], "Boat_Name": row['Boat_Name'], "Status": "Completed"
                         }).execute()
                         
-                    st.session_state.pending_cart = [] 
+                    # เมื่อ Commit เสร็จ ให้ล้างตะกร้าทิ้ง
+                    supabase.table("cart_db").delete().gte("id", 0).execute()
+                    
                     st.success(f"✅ ตัดสต๊อกและบันทึกรหัสบิล {bill_id} เรียบร้อยแล้ว!")
                     st.rerun()
 
