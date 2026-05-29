@@ -4,7 +4,7 @@ from datetime import datetime
 import uuid
 from supabase import create_client, Client
 import io
-import math  # เพิ่ม library สำหรับคำนวณแบ่งหน้า
+import math
 
 st.set_page_config(page_title="Shipyard Inventory", layout="wide")
 
@@ -47,19 +47,25 @@ transaction_df = load_transactions()
 if 'pending_cart' not in st.session_state:
     st.session_state.pending_cart = []
 
-# ==========================================
-# เมนูด้านข้าง (เปลี่ยนคำว่า สินค้า -> วัสดุ)
-# ==========================================
-st.sidebar.title("🛥️ ระบบจัดการคลังอู่เรือ")
-menu = st.sidebar.radio("เมนูหลัก", ["📦 สต๊อกวัสดุหลัก", "🛒 เบิก-รับของ (ตะกร้า)", "📝 ประวัติ & ยกเลิกรายการ (Void)"])
+# ฟังก์ชันช่วยเหลือสำหรับการเปลี่ยนหน้า
+def change_page_inv(delta):
+    st.session_state.page_inv += delta
+
+def change_page_hist(delta):
+    st.session_state.page_hist += delta
 
 # ==========================================
-# หน้า 1: สต๊อกวัสดุหลัก
+# เมนูด้านข้าง
 # ==========================================
-if menu == "📦 สต๊อกวัสดุหลัก":
+st.sidebar.title("🛥️ ระบบจัดการคลังอู่เรือ")
+menu = st.sidebar.radio("เมนูหลัก", ["📦 สต๊อกวัสดุ", "🛒 เบิก-รับของ (ตะกร้า)", "📝 ประวัติ & ยกเลิกรายการ (Void)"])
+
+# ==========================================
+# หน้า 1: สต๊อกวัสดุ
+# ==========================================
+if menu == "📦 สต๊อกวัสดุ":
     st.header("📦 สต๊อกวัสดุคงเหลือ (Master Inventory)")
     
-    # จัดการข้อมูลสต๊อกขั้นต่ำและสถานะ
     if not inventory_df.empty:
         if 'Min_Stock' not in inventory_df.columns:
             inventory_df['Min_Stock'] = 0
@@ -157,7 +163,6 @@ if menu == "📦 สต๊อกวัสดุหลัก":
     st.subheader("📋 ตารางสต๊อกวัสดุ")
     
     if not inventory_df.empty:
-        # --- แผงควบคุมสรุปสถานะวัสดุ (คลิกเพื่อกรองได้) ---
         if 'stock_filter' not in st.session_state:
             st.session_state.stock_filter = "แสดงทั้งหมด"
 
@@ -184,13 +189,11 @@ if menu == "📦 สต๊อกวัสดุหลัก":
 
         st.caption(f"📌 กำลังแสดงผล: **{st.session_state.stock_filter}**")
 
-        # กรองข้อมูลตามสถานะที่กด
         if st.session_state.stock_filter != "แสดงทั้งหมด":
             filtered_by_status = inventory_df[inventory_df['Status'] == st.session_state.stock_filter]
         else:
             filtered_by_status = inventory_df
 
-        # กรองตามโซนเพิ่มเติมได้
         all_zones_display = ["แสดงทุกโซน"] + sorted(list(filtered_by_status['Zone'].unique()))
         selected_zone_view = st.selectbox("📌 ค้นหาเพิ่มเติมตามโซน/ห้อง", all_zones_display, index=None, placeholder="🔍 พิมพ์โซนที่ต้องการ (เว้นว่าง = ดูทั้งหมด)")
         
@@ -206,26 +209,41 @@ if menu == "📦 สต๊อกวัสดุหลัก":
             "Zone": "โซน/หมวดหมู่", "Stock": "ยอดคงเหลือ", "Min_Stock": "ขั้นต่ำ"
         }).drop(columns=['id'], errors='ignore')
         
-        # จัดเรียงคอลัมน์ให้สถานะขึ้นก่อน
         cols = ["สถานะ", "รหัสวัสดุ", "ชื่อวัสดุ", "โซน/หมวดหมู่", "ยอดคงเหลือ", "ขั้นต่ำ"]
         display_inv_df = display_inv_df[cols]
 
-        # --- ระบบแบ่งหน้า (Pagination) หน้าละ 20 รายการ ---
+        # =========================================================
+        # --- ระบบแบ่งหน้าแบบมีปุ่ม (หน้าสต๊อกวัสดุ) ---
+        # =========================================================
         total_rows = len(display_inv_df)
         total_pages = max(1, math.ceil(total_rows / 20))
         
-        page_col1, page_col2 = st.columns([1, 5])
-        with page_col1:
-            current_page = st.number_input("หน้า (Page)", min_value=1, max_value=total_pages, step=1, key="page_inv")
+        if 'page_inv' not in st.session_state:
+            st.session_state.page_inv = 1
         
-        start_idx = (current_page - 1) * 20
+        if st.session_state.page_inv > total_pages or st.session_state.page_inv < 1:
+            st.session_state.page_inv = 1
+
+        start_idx = (st.session_state.page_inv - 1) * 20
         end_idx = start_idx + 20
 
-        # แสดงตารางทีละ 20 บรรทัด
         st.dataframe(display_inv_df.iloc[start_idx:end_idx], use_container_width=True, hide_index=True)
-        st.caption(f"แสดงรายการที่ {start_idx + 1} ถึง {min(end_idx, total_rows)} จากทั้งหมด {total_rows} รายการ")
         
-        # ปุ่มโหลด Excel โหลดข้อมูลทั้งหมดที่ถูกกรอง (ไม่แบ่งหน้า)
+        st.markdown("<br>", unsafe_allow_html=True)
+        pg_col1, pg_col2, pg_col3 = st.columns([1, 2, 1])
+
+        with pg_col1:
+            st.button("⬅️ หน้าก่อนหน้า", on_click=change_page_inv, args=(-1,), disabled=(st.session_state.page_inv <= 1), use_container_width=True, key="prev_inv")
+        with pg_col2:
+            start_item = start_idx + 1 if total_rows > 0 else 0
+            end_item = min(end_idx, total_rows)
+            st.markdown(f"<div style='text-align: center; color: gray;'>แสดงรายการลำดับที่ {start_item} - {end_item} <br>(จากทั้งหมด {total_rows} รายการ)</div>", unsafe_allow_html=True)
+            st.selectbox("เลือกหน้า", range(1, total_pages + 1), key="page_inv", label_visibility="collapsed")
+        with pg_col3:
+            st.button("หน้าถัดไป ➡️", on_click=change_page_inv, args=(1,), disabled=(st.session_state.page_inv >= total_pages), use_container_width=True, key="next_inv")
+        st.markdown("---")
+        # =========================================================
+
         excel_data_inv = to_excel(display_inv_df)
         st.download_button(
             label="📥 ดาวน์โหลดไฟล์ Excel (ตามที่กรองไว้)", 
@@ -358,21 +376,39 @@ elif menu == "📝 ประวัติ & ยกเลิกรายการ 
             "Status": "สถานะ", "Boat_Name": "ชื่อเรือ"
         })
         
-        # --- ระบบแบ่งหน้า (Pagination) หน้าละ 20 รายการ สำหรับประวัติ ---
+        # =========================================================
+        # --- ระบบแบ่งหน้าแบบมีปุ่ม (หน้าประวัติ) ---
+        # =========================================================
         total_hist_rows = len(display_history_df)
         total_hist_pages = max(1, math.ceil(total_hist_rows / 20))
         
-        page_h1, page_h2 = st.columns([1, 5])
-        with page_h1:
-            current_hist_page = st.number_input("หน้า (Page)", min_value=1, max_value=total_hist_pages, step=1, key="page_hist")
-        
-        start_h_idx = (current_hist_page - 1) * 20
+        if 'page_hist' not in st.session_state:
+            st.session_state.page_hist = 1
+            
+        if st.session_state.page_hist > total_hist_pages or st.session_state.page_hist < 1:
+            st.session_state.page_hist = 1
+
+        start_h_idx = (st.session_state.page_hist - 1) * 20
         end_h_idx = start_h_idx + 20
 
         st.dataframe(display_history_df.iloc[start_h_idx:end_h_idx], use_container_width=True, hide_index=True)
-        st.caption(f"แสดงรายการที่ {start_h_idx + 1} ถึง {min(end_h_idx, total_hist_rows)} จากทั้งหมด {total_hist_rows} รายการ")
         
-        excel_data_hist = to_excel(display_history_df) # โหลดข้อมูลทั้งหมดไม่แบ่งหน้า
+        st.markdown("<br>", unsafe_allow_html=True)
+        pg_h1, pg_h2, pg_h3 = st.columns([1, 2, 1])
+
+        with pg_h1:
+            st.button("⬅️ หน้าก่อนหน้า", on_click=change_page_hist, args=(-1,), disabled=(st.session_state.page_hist <= 1), use_container_width=True, key="prev_hist")
+        with pg_h2:
+            start_h_item = start_h_idx + 1 if total_hist_rows > 0 else 0
+            end_h_item = min(end_h_idx, total_hist_rows)
+            st.markdown(f"<div style='text-align: center; color: gray;'>แสดงรายการลำดับที่ {start_h_item} - {end_h_item} <br>(จากทั้งหมด {total_hist_rows} รายการ)</div>", unsafe_allow_html=True)
+            st.selectbox("เลือกหน้า", range(1, total_hist_pages + 1), key="page_hist", label_visibility="collapsed")
+        with pg_h3:
+            st.button("หน้าถัดไป ➡️", on_click=change_page_hist, args=(1,), disabled=(st.session_state.page_hist >= total_hist_pages), use_container_width=True, key="next_hist")
+        st.markdown("---")
+        # =========================================================
+
+        excel_data_hist = to_excel(display_history_df) 
         st.download_button(
             label="📥 ดาวน์โหลดไฟล์ Excel (ประวัติทั้งหมดตามที่กรองนี้)", 
             data=excel_data_hist, file_name=file_name_hist, 
