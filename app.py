@@ -24,7 +24,6 @@ def load_inventory():
         res = supabase.table("inventory_db").select("*").order("id").execute()
         return pd.DataFrame(res.data)
     except Exception as e:
-        st.error(f"🚨 แจ้งเตือนจาก Supabase (inventory_db): {e}")
         return pd.DataFrame()
 
 def load_transactions():
@@ -32,12 +31,25 @@ def load_transactions():
         res = supabase.table("transaction_log").select("*").execute()
         return pd.DataFrame(res.data)
     except Exception as e:
-        st.error(f"🚨 แจ้งเตือนจาก Supabase (transaction_log): {e}")
         return pd.DataFrame()
 
 def load_cart():
     try:
         res = supabase.table("cart_db").select("*").order("id").execute()
+        return pd.DataFrame(res.data)
+    except Exception as e:
+        return pd.DataFrame()
+
+def load_po_cart():
+    try:
+        res = supabase.table("po_cart_db").select("*").order("id").execute()
+        return pd.DataFrame(res.data)
+    except Exception as e:
+        return pd.DataFrame()
+
+def load_po_log():
+    try:
+        res = supabase.table("po_log").select("*").execute()
         return pd.DataFrame(res.data)
     except Exception as e:
         return pd.DataFrame()
@@ -51,6 +63,8 @@ def to_excel(df):
 inventory_df = load_inventory()
 transaction_df = load_transactions()
 cart_df = load_cart()
+po_cart_df = load_po_cart()
+po_log_df = load_po_log()
 
 def change_page_inv(delta):
     st.session_state.page_inv += delta
@@ -61,8 +75,8 @@ def change_page_hist(delta):
 # ==========================================
 # เมนูด้านข้าง
 # ==========================================
-st.sidebar.title("🛥️ ระบบจัดการคลังอู่เรือ")
-menu = st.sidebar.radio("เมนูหลัก", ["📦 สต๊อกวัสดุ", "🛒 เบิก-รับของ (ตะกร้า)", "📝 ประวัติ & ยกเลิกรายการ (Void)"])
+st.sidebar.title("🛥️ ระบบจัดการอู่เรือ")
+menu = st.sidebar.radio("เมนูหลัก", ["📦 สต๊อกวัสดุ", "🛒 เบิก-รับของ (หน้างาน)", "📋 ระบบจัดซื้อ (PO)", "📝 ประวัติ & ยกเลิกรายการ"])
 
 # ==========================================
 # หน้า 1: สต๊อกวัสดุ
@@ -93,7 +107,6 @@ if menu == "📦 สต๊อกวัสดุ":
             new_code = col1.text_input("รหัสวัสดุ (Item Code) *")
             new_name = col2.text_input("ชื่อวัสดุ/อุปกรณ์ (Item Name) *")
             
-            # แก้ไขตรงนี้ให้ดึงจาก inventory_df ถูกต้องแล้วครับ
             existing_zones = list(inventory_df['Zone'].unique()) if not inventory_df.empty else []
             selected_zone = col1.selectbox("เลือกโซนที่มีอยู่", existing_zones, index=None, placeholder="พิมพ์หรือเลือกโซน...")
             custom_zone = col1.text_input("➕ หรือ พิมพ์ชื่อโซนใหม่")
@@ -200,8 +213,6 @@ if menu == "📦 สต๊อกวัสดุ":
                 st.session_state.stock_filter = "แสดงทั้งหมด"
                 st.rerun()
 
-        st.caption(f"📌 กำลังแสดงผล: **{st.session_state.stock_filter}**")
-
         if st.session_state.stock_filter != "แสดงทั้งหมด":
             filtered_by_status = inventory_df[inventory_df['Status'] == st.session_state.stock_filter]
         else:
@@ -255,7 +266,7 @@ if menu == "📦 สต๊อกวัสดุ":
 
         excel_data_inv = to_excel(display_inv_df)
         st.download_button(
-            label="📥 ดาวน์โหลดไฟล์ Excel (ตามที่กรองไว้)", 
+            label="📥 ดาวน์โหลดไฟล์ Excel", 
             data=excel_data_inv, 
             file_name=file_name_inv, 
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -263,9 +274,9 @@ if menu == "📦 สต๊อกวัสดุ":
         )
 
 # ==========================================
-# หน้า 2: ระบบเบิก-รับของ
+# หน้า 2: ระบบเบิก-รับของ (ช่างหน้างาน)
 # ==========================================
-elif menu == "🛒 เบิก-รับของ (ตะกร้า)":
+elif menu == "🛒 เบิก-รับของ (หน้างาน)":
     st.header("🛒 ฟอร์มทำรายการ & ตะกร้าพักของ")
     col1, col2 = st.columns([1, 1])
     
@@ -278,7 +289,7 @@ elif menu == "🛒 เบิก-รับของ (ตะกร้า)":
 
         st.subheader("2. เลือกวัสดุลงตะกร้า")
         all_zones = ["แสดงทุกโซน"] + list(inventory_df['Zone'].unique()) if not inventory_df.empty else ["แสดงทุกโซน"]
-        selected_zone_filter = st.selectbox("📌 กรองตามโซน (หมวดหมู่)", all_zones, index=None, placeholder="🔍 พิมพ์โซน (เว้นว่าง = ค้นหาจากทุกโซน)")
+        selected_zone_filter = st.selectbox("📌 กรองตามโซน", all_zones, index=None, placeholder="🔍 พิมพ์โซน...")
         
         if not selected_zone_filter or selected_zone_filter == "แสดงทุกโซน":
             filtered_items = inventory_df['Item_Name'] if not inventory_df.empty else []
@@ -291,7 +302,7 @@ elif menu == "🛒 เบิก-รับของ (ตะกร้า)":
             
             if st.form_submit_button("➕ เพิ่มลงตะกร้า"):
                 if not item or not worker:
-                    st.error("❌ กรุณาเลือกวัสดุ และระบุชื่อผู้เบิก (ในกรอบด้านบน) ให้ครบถ้วน")
+                    st.error("❌ กรุณาเลือกวัสดุ และระบุชื่อผู้เบิกให้ครบถ้วน")
                 else:
                     current_stock = inventory_df.loc[inventory_df['Item_Name'] == item, 'Stock'].values[0]
                     if action == "เบิกออก" and qty > current_stock:
@@ -302,7 +313,7 @@ elif menu == "🛒 เบิก-รับของ (ตะกร้า)":
                                 "Action": action, "Item_Name": item, "Qty": int(qty), 
                                 "Worker": worker, "Boat_Name": boat_name if boat_name else "-" 
                             }).execute()
-                            st.success(f"✅ เพิ่ม {item} ลงตะกร้าแล้ว (รีเฟรชหน้าจอก็ไม่หาย!)")
+                            st.success(f"✅ เพิ่ม {item} ลงตะกร้าแล้ว")
                             st.rerun()
                         except Exception as e:
                             st.error(f"🚨 นำลงตะกร้าไม่สำเร็จ: {e}")
@@ -325,7 +336,7 @@ elif menu == "🛒 เบิก-รับของ (ตะกร้า)":
                     supabase.table("cart_db").delete().gte("id", 0).execute()
                     st.rerun()
             with col_b:
-                if st.button("💾 ยืนยันตัดสต๊อก 1 บิล (Commit)", type="primary"):
+                if st.button("💾 ยืนยันตัดสต๊อก 1 บิล", type="primary"):
                     next_bill_num = 1
                     if not transaction_df.empty:
                         smy_rows = transaction_df[transaction_df['TxID'].str.startswith('SMY_', na=False)]
@@ -351,14 +362,112 @@ elif menu == "🛒 เบิก-รับของ (ตะกร้า)":
                         }).execute()
                         
                     supabase.table("cart_db").delete().gte("id", 0).execute()
-                    st.success(f"✅ ตัดสต๊อกและบันทึกรหัสบิล {bill_id} เรียบร้อยแล้ว!")
+                    st.success(f"✅ ตัดสต๊อกเรียบร้อยแล้ว!")
                     st.rerun()
 
 # ==========================================
-# หน้า 3: ประวัติ (ยกเลิกและลบถาวร)
+# หน้า 3: ระบบจัดซื้อ (PO) ---> ใหม่ล่าสุด!
 # ==========================================
-elif menu == "📝 ประวัติ & ยกเลิกรายการ (Void)":
-    st.header("📝 ประวัติทำรายการ & ยกเลิกบิล")
+elif menu == "📋 ระบบจัดซื้อ (PO)":
+    st.header("📋 ระบบออกใบขอซื้อ / ใบสั่งซื้อ (PO)")
+    st.caption("จำลองรูปแบบจากไฟล์ Excel สามารถคำนวณราคาสุทธิให้อัตโนมัติ")
+    
+    col1, col2 = st.columns([1.2, 1])
+    
+    with col1:
+        st.subheader("1. ข้อมูลบิล (ระบุครั้งเดียว)")
+        with st.container(border=True):
+            requester = st.text_input("ชื่อผู้ขอซื้อ / แผนก", placeholder="เช่น สโตร์, พี่ต๋อง, พ่อพี่เทิด")
+            shop_name = st.text_input("ซื้อจากร้าน (ชื่อร้าน)", placeholder="พิมพ์ชื่อร้านค้า...")
+
+        st.subheader("2. เพิ่มรายการลงใบสั่งซื้อ")
+        all_items = inventory_df['Item_Name'].tolist() if not inventory_df.empty else []
+        
+        with st.form("add_po_form", clear_on_submit=True):
+            st.info("💡 เมื่อเลือกวัสดุ ระบบจะดึง 'หน่วยนับ' จากคลังมาให้อัตโนมัติ")
+            selected_item = st.selectbox("เลือกรายการวัสดุ", all_items, index=None, placeholder="🔍 พิมพ์ค้นหารายการ...")
+            
+            c1, c2 = st.columns(2)
+            qty = c1.number_input("จำนวน", min_value=1, step=1)
+            price_per_unit = c2.number_input("ราคา/หน่วย (บาท)", min_value=0.0, step=1.0)
+            
+            c3, c4 = st.columns(2)
+            discount = c3.number_input("ส่วนลดรวมรายการนี้ (บาท)", min_value=0.0, step=1.0)
+            shipping = c4.number_input("ค่าส่ง/VAT รายการนี้ (บาท)", min_value=0.0, step=1.0)
+            
+            if st.form_submit_button("➕ นำลงใบสั่งซื้อ"):
+                if not requester or not selected_item or not shop_name:
+                    st.error("❌ กรุณากรอก ชื่อผู้ขอซื้อ, ชื่อร้าน และเลือกรายการ ให้ครบถ้วน")
+                else:
+                    unit_val = inventory_df.loc[inventory_df['Item_Name'] == selected_item, 'Unit'].values[0]
+                    net_price = (qty * price_per_unit) - discount + shipping
+                    
+                    try:
+                        supabase.table("po_cart_db").insert({
+                            "Requester": requester, "Item_Name": selected_item, "Qty": int(qty), 
+                            "Unit": str(unit_val), "Price_Per_Unit": float(price_per_unit),
+                            "Discount": float(discount), "Shipping": float(shipping),
+                            "Net_Price": float(net_price), "Shop_Name": shop_name
+                        }).execute()
+                        st.success(f"✅ เพิ่ม {selected_item} ลงใบสั่งซื้อแล้ว")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"🚨 นำลงตะกร้าสั่งซื้อไม่สำเร็จ: {e}")
+
+    with col2:
+        st.subheader("3. รายการที่รอสั่งซื้อ")
+        if po_cart_df.empty:
+            st.info("ยังไม่มีรายการในตะกร้าจัดซื้อ")
+        else:
+            display_po_cart = po_cart_df.rename(columns={
+                "Requester": "ผู้ขอซื้อ", "Item_Name": "รายการ", "Qty": "จำนวน", "Unit": "หน่วย",
+                "Price_Per_Unit": "ราคา/หน่วย", "Discount": "ส่วนลด", "Shipping": "ค่าส่ง",
+                "Net_Price": "ราคาสุทธิ", "Shop_Name": "ชื่อร้าน"
+            }).drop(columns=['id'])
+            
+            st.dataframe(display_po_cart, use_container_width=True, hide_index=True)
+            
+            total_po_amount = po_cart_df['Net_Price'].sum()
+            st.markdown(f"<h4 style='text-align: right; color: green;'>รวมยอดบิลนี้: ฿ {total_po_amount:,.2f}</h4>", unsafe_allow_html=True)
+            
+            col_a, col_b = st.columns(2)
+            with col_a:
+                if st.button("🗑️ ล้างตะกร้าสั่งซื้อ", type="secondary"):
+                    supabase.table("po_cart_db").delete().gte("id", 0).execute()
+                    st.rerun()
+            with col_b:
+                if st.button("💾 บันทึกใบสั่งซื้อ (Save PO)", type="primary"):
+                    next_po_num = 1
+                    if not po_log_df.empty:
+                        po_rows = po_log_df['PO_ID'].unique()
+                        nums = [int(str(x).replace('PO_', '')) for x in po_rows if 'PO_' in str(x)]
+                        if nums:
+                            next_po_num = max(nums) + 1
+                    
+                    po_id = f"PO_{next_po_num:04d}" 
+                    tz_th = timezone(timedelta(hours=7))
+                    current_time = datetime.now(tz_th).strftime("%Y-%m-%d %H:%M:%S")
+
+                    for idx, row in po_cart_df.iterrows():
+                        tx_id = f"{po_id}-{idx+1}"
+                        supabase.table("po_log").insert({
+                            "TxID": tx_id, "PO_ID": po_id, "Timestamp": current_time, 
+                            "Requester": row['Requester'], "Item_Name": row['Item_Name'], 
+                            "Qty": int(row['Qty']), "Unit": str(row['Unit']),
+                            "Price_Per_Unit": float(row['Price_Per_Unit']), "Discount": float(row['Discount']),
+                            "Shipping": float(row['Shipping']), "Net_Price": float(row['Net_Price']),
+                            "Shop_Name": row['Shop_Name'], "Status": "รอรับของ"
+                        }).execute()
+                        
+                    supabase.table("po_cart_db").delete().gte("id", 0).execute()
+                    st.success(f"✅ บันทึกใบสั่งซื้อ {po_id} เข้าสู่ระบบประวัติเรียบร้อยแล้ว!")
+                    st.rerun()
+
+# ==========================================
+# หน้า 4: ประวัติ & ยกเลิก
+# ==========================================
+elif menu == "📝 ประวัติ & ยกเลิกรายการ":
+    st.header("📝 ประวัติเบิก-รับของ & ยกเลิกบิล")
     
     if transaction_df.empty:
         st.info("ยังไม่มีประวัติการทำรายการ")
@@ -366,17 +475,17 @@ elif menu == "📝 ประวัติ & ยกเลิกรายการ 
         if 'Boat_Name' in transaction_df.columns:
             unique_boats = [b for b in transaction_df['Boat_Name'].unique() if pd.notna(b) and b != "-"]
             all_boat_options = ["📋 ดูประวัติทั้งหมด"] + unique_boats
-            selected_boat_filter = st.selectbox("⚓ ค้นหาประวัติการเบิกตามชื่อเรือ", all_boat_options, index=None, placeholder="🔍 พิมพ์ชื่อเรือ (เว้นว่าง = ดูทั้งหมด)")
+            selected_boat_filter = st.selectbox("⚓ ค้นหาประวัติการเบิกตามชื่อเรือ", all_boat_options, index=None, placeholder="🔍 พิมพ์ชื่อเรือ...")
             
             if not selected_boat_filter or selected_boat_filter == "📋 ดูประวัติทั้งหมด":
                 base_df = transaction_df
-                file_name_hist = "History_All_Boats.xlsx"
+                file_name_hist = "History.xlsx"
             else:
                 base_df = transaction_df[transaction_df['Boat_Name'] == selected_boat_filter]
-                file_name_hist = f"History_Boat_{selected_boat_filter}.xlsx"
+                file_name_hist = f"History_{selected_boat_filter}.xlsx"
         else:
             base_df = transaction_df 
-            file_name_hist = "History_All.xlsx"
+            file_name_hist = "History.xlsx"
             
         hide_voided = st.checkbox("👁️ ซ่อนรายการที่ยกเลิกไปแล้ว (Voided) จากตารางด้านล่าง", value=True)
         
@@ -420,7 +529,7 @@ elif menu == "📝 ประวัติ & ยกเลิกรายการ 
 
         excel_data_hist = to_excel(display_history_df) 
         st.download_button(
-            label="📥 ดาวน์โหลดไฟล์ Excel (ประวัติทั้งหมดตามที่กรองนี้)", 
+            label="📥 ดาวน์โหลดไฟล์ Excel", 
             data=excel_data_hist, file_name=file_name_hist, 
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", type="primary"
         )
