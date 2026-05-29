@@ -17,7 +17,6 @@ def init_connection():
 
 supabase = init_connection()
 
-# ฟังก์ชันดึงข้อมูลแบบ Real-time (ดัก Error เผื่อไว้)
 def load_inventory():
     try:
         res = supabase.table("inventory_db").select("*").order("id").execute()
@@ -34,11 +33,9 @@ def load_transactions():
         st.error(f"🚨 แจ้งเตือนจาก Supabase (transaction_log): {e}")
         return pd.DataFrame()
 
-# ดึงข้อมูลมาเก็บไว้ใช้งาน
 inventory_df = load_inventory()
 transaction_df = load_transactions()
 
-# ตะกร้าพักรายการ
 if 'pending_cart' not in st.session_state:
     st.session_state.pending_cart = []
 
@@ -54,7 +51,6 @@ menu = st.sidebar.radio("เมนูหลัก", ["📦 สต๊อกสิ
 if menu == "📦 สต๊อกสินค้าหลัก":
     st.header("📦 สต๊อกสินค้าคงเหลือ (Master Inventory)")
     
-    # --- ฟอร์มสร้างสินค้าชนิดใหม่ ---
     with st.expander("➕ สร้างทะเบียนสินค้าใหม่ (New Item)"):
         with st.form("add_new_item_form", clear_on_submit=True):
             col1, col2 = st.columns(2)
@@ -70,7 +66,6 @@ if menu == "📦 สต๊อกสินค้าหลัก":
             
             if submit_new:
                 final_zone = custom_zone.strip() if custom_zone.strip() != "" else selected_zone
-                
                 if not new_code or not new_name:
                     st.error("❌ กรุณากรอกรหัสสินค้าและชื่ออุปกรณ์ให้ครบถ้วน")
                 elif not inventory_df.empty and new_code in inventory_df['Item_Code'].values:
@@ -80,21 +75,16 @@ if menu == "📦 สต๊อกสินค้าหลัก":
                 else:
                     try:
                         supabase.table("inventory_db").insert({
-                            "Item_Code": new_code,
-                            "Item_Name": new_name,
-                            "Zone": final_zone,
-                            "Stock": int(new_stock)
+                            "Item_Code": new_code, "Item_Name": new_name, "Zone": final_zone, "Stock": int(new_stock)
                         }).execute()
                         st.success(f"✅ เพิ่มทะเบียน '{new_name}' เรียบร้อยแล้ว!")
                         st.rerun()
                     except Exception as e:
                         st.error(f"🚨 เกิดข้อผิดพลาดจากฐานข้อมูล: {e}")
 
-    # --- ระบบแก้ไข / ลบ ข้อมูลสินค้า ---
     with st.expander("🛠️ แก้ไข / ลบ ทะเบียนสินค้า (Edit & Delete)"):
         if not inventory_df.empty:
             edit_action = st.radio("เลือกโหมดการทำงาน", ["✏️ แก้ไขข้อมูล", "🗑️ ลบสินค้า"], horizontal=True)
-            
             item_list = sorted(inventory_df['Item_Name'].tolist())
             selected_edit_item = st.selectbox("ค้นหาสินค้าที่ต้องการจัดการ", item_list, index=None, placeholder="🔍 พิมพ์หรือเลือกชื่ออุปกรณ์...")
             
@@ -114,14 +104,10 @@ if menu == "📦 สต๊อกสินค้าหลัก":
                         edit_zone = col1.selectbox("โซน/หมวดหมู่", existing_zones_edit, index=zone_idx)
                         
                         edit_stock = col2.number_input("ยอดสต๊อก (ปัจจุบัน)", value=int(target_row['Stock']), min_value=0, step=1)
-                        
                         if st.form_submit_button("💾 บันทึกการเปลี่ยนแปลง"):
                             try:
                                 supabase.table("inventory_db").update({
-                                    "Item_Code": edit_code,
-                                    "Item_Name": edit_name,
-                                    "Zone": edit_zone,
-                                    "Stock": edit_stock
+                                    "Item_Code": edit_code, "Item_Name": edit_name, "Zone": edit_zone, "Stock": edit_stock
                                 }).eq("id", target_id).execute()
                                 st.success("✅ อัปเดตข้อมูลเรียบร้อยแล้ว!")
                                 st.rerun()
@@ -138,12 +124,11 @@ if menu == "📦 สต๊อกสินค้าหลัก":
                         except Exception as e:
                             st.error(f"🚨 ลบไม่สำเร็จ: {e}")
 
-    # --- ตารางแสดงผลสต๊อกหลัก ---
     st.markdown("---")
     st.dataframe(inventory_df, use_container_width=True, hide_index=True)
 
 # ==========================================
-# หน้า 2: ระบบเบิก-รับของ
+# หน้า 2: ระบบเบิก-รับของ (อัปเดตเพิ่มชื่อเรือ)
 # ==========================================
 elif menu == "🛒 เบิก-รับของ (ตะกร้า)":
     st.header("🛒 ฟอร์มทำรายการ & ตะกร้าพักของ")
@@ -164,6 +149,7 @@ elif menu == "🛒 เบิก-รับของ (ตะกร้า)":
             item = st.selectbox("เลือกอุปกรณ์", filtered_items, index=None, placeholder="🔍 พิมพ์ค้นหา...")
             qty = st.number_input("จำนวน", min_value=1, step=1)
             worker = st.text_input("ชื่อผู้เบิก/ผู้รับ")
+            boat_name = st.text_input("⚓ ชื่อเรือที่ปฏิบัติงาน (ใส่หรือไม่ใส่ก็ได้)") # เพิ่มช่องกรอกชื่อเรือตรงนี้
             
             if st.form_submit_button("➕ เพิ่มลงตะกร้า"):
                 if not item or not worker:
@@ -174,7 +160,8 @@ elif menu == "🛒 เบิก-รับของ (ตะกร้า)":
                         st.error(f"เบิกไม่ได้! {item} มีของในสต๊อกแค่ {current_stock}")
                     else:
                         st.session_state.pending_cart.append({
-                            "Action": action, "Item_Name": item, "Qty": qty, "Worker": worker
+                            "Action": action, "Item_Name": item, "Qty": qty, 
+                            "Worker": worker, "Boat_Name": boat_name if boat_name else "-" # บันทึกชื่อเรือลงตะกร้า
                         })
                         st.success("✅ เพิ่มลงตะกร้าสำเร็จ")
 
@@ -206,6 +193,7 @@ elif menu == "🛒 เบิก-รับของ (ตะกร้า)":
                             "Item_Name": row['Item_Name'],
                             "Qty": int(row['Qty']),
                             "Worker": row['Worker'],
+                            "Boat_Name": row['Boat_Name'], # ส่งชื่อเรือเข้าฐานข้อมูล
                             "Status": "Completed"
                         }).execute()
                         
@@ -214,7 +202,7 @@ elif menu == "🛒 เบิก-รับของ (ตะกร้า)":
                     st.rerun()
 
 # ==========================================
-# หน้า 3: ประวัติ และระบบ Void
+# หน้า 3: ประวัติ (อัปเดตระบบแยกตามชื่อเรือ)
 # ==========================================
 elif menu == "📝 ประวัติ & ยกเลิกรายการ (Void)":
     st.header("📝 ประวัติทำรายการ & ยกเลิกบิล")
@@ -222,11 +210,26 @@ elif menu == "📝 ประวัติ & ยกเลิกรายการ 
     if transaction_df.empty:
         st.info("ยังไม่มีประวัติการทำรายการ")
     else:
-        st.dataframe(transaction_df.iloc[::-1], use_container_width=True, hide_index=True)
+        # ดึงรายชื่อเรือทั้งหมดที่มีในประวัติ (ตัดพวกค่าว่างหรือ - ออกเพื่อความสวยงาม)
+        if 'Boat_Name' in transaction_df.columns:
+            unique_boats = [b for b in transaction_df['Boat_Name'].unique() if pd.notna(b) and b != "-"]
+            all_boat_options = ["📋 ดูประวัติทั้งหมด"] + unique_boats
+            
+            # สร้างตัวกรองชื่อเรือ
+            selected_boat_filter = st.selectbox("⚓ ค้นหาประวัติการเบิกตามชื่อเรือ", all_boat_options)
+            
+            if selected_boat_filter == "📋 ดูประวัติทั้งหมด":
+                display_df = transaction_df
+            else:
+                display_df = transaction_df[transaction_df['Boat_Name'] == selected_boat_filter]
+        else:
+            display_df = transaction_df # เผื่อกรณีคอลัมน์ยังไม่มา
+            
+        st.dataframe(display_df.iloc[::-1], use_container_width=True, hide_index=True)
         st.markdown("---")
-        st.subheader("ดึงสต๊อกกลับ (Void Transaction)")
         
-        valid_tx = transaction_df[transaction_df['Status'] == 'Completed']
+        st.subheader("ดึงสต๊อกกลับ (Void Transaction)")
+        valid_tx = display_df[display_df['Status'] == 'Completed']
         if not valid_tx.empty:
             with st.form("void_form"):
                 tx_to_void = st.selectbox("เลือก รหัสทำรายการ (TxID) ที่ต้องการยกเลิก", valid_tx['TxID'])
