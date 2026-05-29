@@ -46,7 +46,7 @@ st.sidebar.title("🛥️ ระบบจัดการคลังอู่เ
 menu = st.sidebar.radio("เมนูหลัก", ["📦 สต๊อกสินค้าหลัก", "🛒 เบิก-รับของ (ตะกร้า)", "📝 ประวัติ & ยกเลิกรายการ (Void)"])
 
 # ==========================================
-# หน้า 1: สต๊อกสินค้าหลัก (เพิ่ม/แก้ไข/ลบ)
+# หน้า 1: สต๊อกสินค้าหลัก
 # ==========================================
 if menu == "📦 สต๊อกสินค้าหลัก":
     st.header("📦 สต๊อกสินค้าคงเหลือ (Master Inventory)")
@@ -94,7 +94,6 @@ if menu == "📦 สต๊อกสินค้าหลัก":
                 
                 if edit_action == "✏️ แก้ไขข้อมูล":
                     with st.form("edit_item_form"):
-                        st.info("แก้คำผิด เปลี่ยนหมวดหมู่ หรือปรับยอดสต๊อกที่นับพลาดได้เลย")
                         col1, col2 = st.columns(2)
                         edit_code = col1.text_input("รหัสสินค้า", value=target_row['Item_Code'])
                         edit_name = col2.text_input("ชื่ออุปกรณ์", value=target_row['Item_Name'])
@@ -125,17 +124,30 @@ if menu == "📦 สต๊อกสินค้าหลัก":
                             st.error(f"🚨 ลบไม่สำเร็จ: {e}")
 
     st.markdown("---")
-    st.dataframe(inventory_df, use_container_width=True, hide_index=True)
+    if not inventory_df.empty:
+        display_inv_df = inventory_df.rename(columns={
+            "Item_Code": "รหัสสินค้า", "Item_Name": "ชื่ออุปกรณ์", 
+            "Zone": "โซน/หมวดหมู่", "Stock": "ยอดคงเหลือ"
+        })
+        st.dataframe(display_inv_df.drop(columns=['id'], errors='ignore'), use_container_width=True, hide_index=True)
 
 # ==========================================
-# หน้า 2: ระบบเบิก-รับของ (อัปเดตเพิ่มชื่อเรือ)
+# หน้า 2: ระบบเบิก-รับของ (อัปเดตให้กดรัวๆ ได้)
 # ==========================================
 elif menu == "🛒 เบิก-รับของ (ตะกร้า)":
     st.header("🛒 ฟอร์มทำรายการ & ตะกร้าพักของ")
     col1, col2 = st.columns([1, 1])
     
     with col1:
-        st.subheader("1. เพิ่มรายการลงตะกร้า")
+        # ส่วนที่ 1: ข้อมูลบิล (ระบุครั้งเดียว ไม่โดนล้างค่า)
+        st.subheader("1. ข้อมูลบิล (ระบุครั้งเดียว)")
+        with st.container(border=True):
+            action = st.radio("ประเภท", ["เบิกออก", "รับเข้า"], horizontal=True)
+            worker = st.text_input("ชื่อผู้เบิก/ผู้รับ (พิมพ์ครั้งเดียว)")
+            boat_name = st.text_input("⚓ ชื่อเรือที่ปฏิบัติงาน (ใส่หรือไม่ใส่ก็ได้)") 
+
+        # ส่วนที่ 2: หยิบของลงตะกร้า (ส่วนนี้ล้างค่าทุกครั้งที่กดเพิ่ม)
+        st.subheader("2. เลือกอุปกรณ์ลงตะกร้า")
         all_zones = ["แสดงทุกโซน"] + list(inventory_df['Zone'].unique()) if not inventory_df.empty else ["แสดงทุกโซน"]
         selected_zone_filter = st.selectbox("📌 กรองตามโซน (หมวดหมู่)", all_zones)
         
@@ -145,15 +157,12 @@ elif menu == "🛒 เบิก-รับของ (ตะกร้า)":
             filtered_items = inventory_df[inventory_df['Zone'] == selected_zone_filter]['Item_Name']
 
         with st.form("add_to_cart_form", clear_on_submit=True):
-            action = st.radio("ประเภท", ["เบิกออก", "รับเข้า"], horizontal=True)
             item = st.selectbox("เลือกอุปกรณ์", filtered_items, index=None, placeholder="🔍 พิมพ์ค้นหา...")
             qty = st.number_input("จำนวน", min_value=1, step=1)
-            worker = st.text_input("ชื่อผู้เบิก/ผู้รับ")
-            boat_name = st.text_input("⚓ ชื่อเรือที่ปฏิบัติงาน (ใส่หรือไม่ใส่ก็ได้)") # เพิ่มช่องกรอกชื่อเรือตรงนี้
             
             if st.form_submit_button("➕ เพิ่มลงตะกร้า"):
                 if not item or not worker:
-                    st.error("❌ กรุณาเลือกอุปกรณ์และใส่ชื่อผู้เบิก")
+                    st.error("❌ กรุณาเลือกอุปกรณ์ และระบุชื่อผู้เบิก (ในกรอบด้านบน) ให้ครบถ้วน")
                 else:
                     current_stock = inventory_df.loc[inventory_df['Item_Name'] == item, 'Stock'].values[0]
                     if action == "เบิกออก" and qty > current_stock:
@@ -161,17 +170,21 @@ elif menu == "🛒 เบิก-รับของ (ตะกร้า)":
                     else:
                         st.session_state.pending_cart.append({
                             "Action": action, "Item_Name": item, "Qty": qty, 
-                            "Worker": worker, "Boat_Name": boat_name if boat_name else "-" # บันทึกชื่อเรือลงตะกร้า
+                            "Worker": worker, "Boat_Name": boat_name if boat_name else "-" 
                         })
-                        st.success("✅ เพิ่มลงตะกร้าสำเร็จ")
+                        st.success(f"✅ เพิ่ม {item} ลงตะกร้าแล้ว (เลือกชิ้นต่อไปต่อได้เลย)")
 
     with col2:
-        st.subheader("2. ตะกร้าของวันนี้ (รอตัดสต๊อก)")
+        st.subheader("3. ตะกร้าของวันนี้ (รอตัดสต๊อก)")
         if not st.session_state.pending_cart:
             st.info("ยังไม่มีรายการในตะกร้า")
         else:
             cart_df = pd.DataFrame(st.session_state.pending_cart)
-            st.dataframe(cart_df, use_container_width=True)
+            display_cart_df = cart_df.rename(columns={
+                "Action": "ประเภท", "Item_Name": "ชื่ออุปกรณ์", "Qty": "จำนวน", 
+                "Worker": "ผู้เบิก/รับ", "Boat_Name": "ชื่อเรือ"
+            })
+            st.dataframe(display_cart_df, use_container_width=True, hide_index=True)
             
             col_a, col_b = st.columns(2)
             with col_a:
@@ -179,21 +192,28 @@ elif menu == "🛒 เบิก-รับของ (ตะกร้า)":
                     st.session_state.pending_cart = []
                     st.rerun()
             with col_b:
-                if st.button("💾 ยืนยันตัดสต๊อก (Commit)", type="primary"):
-                    for row in st.session_state.pending_cart:
+                if st.button("💾 ยืนยันตัดสต๊อก 1 บิล (Commit)", type="primary"):
+                    # สร้างรหัสบิลหลัก 1 อัน สำหรับทุกรายการในตะกร้านี้
+                    bill_id = str(uuid.uuid4())[:6].upper()
+                    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+                    for idx, row in enumerate(st.session_state.pending_cart):
                         target_item = inventory_df[inventory_df['Item_Name'] == row['Item_Name']].iloc[0]
                         new_stock = target_item['Stock'] - row['Qty'] if row['Action'] == "เบิกออก" else target_item['Stock'] + row['Qty']
                         
                         supabase.table("inventory_db").update({"Stock": int(new_stock)}).eq("Item_Code", target_item['Item_Code']).execute()
                         
+                        # รหัสบิลจะหน้าตาแบบ: A1B2C3-1, A1B2C3-2
+                        item_txid = f"{bill_id}-{idx+1}" 
+
                         supabase.table("transaction_log").insert({
-                            "TxID": str(uuid.uuid4())[:8],
-                            "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                            "TxID": item_txid,
+                            "Timestamp": current_time,
                             "Action": row['Action'],
                             "Item_Name": row['Item_Name'],
                             "Qty": int(row['Qty']),
                             "Worker": row['Worker'],
-                            "Boat_Name": row['Boat_Name'], # ส่งชื่อเรือเข้าฐานข้อมูล
+                            "Boat_Name": row['Boat_Name'],
                             "Status": "Completed"
                         }).execute()
                         
@@ -202,7 +222,7 @@ elif menu == "🛒 เบิก-รับของ (ตะกร้า)":
                     st.rerun()
 
 # ==========================================
-# หน้า 3: ประวัติ (อัปเดตระบบแยกตามชื่อเรือ)
+# หน้า 3: ประวัติ (อัปเดตระบบยกเลิกแบบรวดเดียวทั้งบิล)
 # ==========================================
 elif menu == "📝 ประวัติ & ยกเลิกรายการ (Void)":
     st.header("📝 ประวัติทำรายการ & ยกเลิกบิล")
@@ -210,12 +230,10 @@ elif menu == "📝 ประวัติ & ยกเลิกรายการ 
     if transaction_df.empty:
         st.info("ยังไม่มีประวัติการทำรายการ")
     else:
-        # ดึงรายชื่อเรือทั้งหมดที่มีในประวัติ (ตัดพวกค่าว่างหรือ - ออกเพื่อความสวยงาม)
         if 'Boat_Name' in transaction_df.columns:
             unique_boats = [b for b in transaction_df['Boat_Name'].unique() if pd.notna(b) and b != "-"]
             all_boat_options = ["📋 ดูประวัติทั้งหมด"] + unique_boats
             
-            # สร้างตัวกรองชื่อเรือ
             selected_boat_filter = st.selectbox("⚓ ค้นหาประวัติการเบิกตามชื่อเรือ", all_boat_options)
             
             if selected_boat_filter == "📋 ดูประวัติทั้งหมด":
@@ -223,24 +241,57 @@ elif menu == "📝 ประวัติ & ยกเลิกรายการ 
             else:
                 display_df = transaction_df[transaction_df['Boat_Name'] == selected_boat_filter]
         else:
-            display_df = transaction_df # เผื่อกรณีคอลัมน์ยังไม่มา
+            display_df = transaction_df 
             
-        st.dataframe(display_df.iloc[::-1], use_container_width=True, hide_index=True)
+        display_history_df = display_df.iloc[::-1].rename(columns={
+            "TxID": "รหัสบิล", "Timestamp": "วันเวลาที่ทำรายการ", "Action": "ประเภท",
+            "Item_Name": "ชื่ออุปกรณ์", "Qty": "จำนวน", "Worker": "ผู้เบิก/ผู้รับ",
+            "Status": "สถานะ", "Boat_Name": "ชื่อเรือ"
+        })
+        st.dataframe(display_history_df, use_container_width=True, hide_index=True)
+        
         st.markdown("---")
         
+        # --- ระบบยกเลิกบิลแบบกลุ่ม ---
         st.subheader("ดึงสต๊อกกลับ (Void Transaction)")
-        valid_tx = display_df[display_df['Status'] == 'Completed']
+        valid_tx = display_df[display_df['Status'] == 'Completed'].copy()
+        
         if not valid_tx.empty:
+            # ดึงรหัสบิลหลักออกมา (ตัดเลข -1, -2 ทิ้ง)
+            valid_tx['Bill_Group'] = valid_tx['TxID'].apply(lambda x: str(x).split('-')[0])
+            
+            # สรุปข้อมูลให้ดูง่ายๆ ว่าบิลนี้ใครเบิก เรืออะไร มีกี่ชิ้น
+            group_summary = valid_tx.groupby('Bill_Group').agg({
+                'Worker': 'first', 'Boat_Name': 'first', 'Item_Name': 'count'
+            }).reset_index()
+
+            def format_bill(row):
+                boat = row['Boat_Name'] if row['Boat_Name'] and row['Boat_Name'] != '-' else 'ไม่ระบุ'
+                return f"{row['Bill_Group']} | เบิกโดย: {row['Worker']} | เรือ: {boat} ({row['Item_Name']} รายการ)"
+
+            group_summary['Display'] = group_summary.apply(format_bill, axis=1)
+
             with st.form("void_form"):
-                tx_to_void = st.selectbox("เลือก รหัสทำรายการ (TxID) ที่ต้องการยกเลิก", valid_tx['TxID'])
-                if st.form_submit_button("⚠️ ยืนยันการยกเลิกรายการ"):
-                    tx_data = transaction_df[transaction_df['TxID'] == tx_to_void].iloc[0]
-                    target_item = inventory_df[inventory_df['Item_Name'] == tx_data['Item_Name']].iloc[0]
+                tx_to_void_display = st.selectbox("เลือกบิลที่ต้องการยกเลิก (ระบบจะคืนสต๊อกทุกรายการในบิลนี้)", group_summary['Display'])
+                if st.form_submit_button("⚠️ ยืนยันการยกเลิกทั้งบิล"):
                     
-                    new_stock = target_item['Stock'] + int(tx_data['Qty']) if tx_data['Action'] == "เบิกออก" else target_item['Stock'] - int(tx_data['Qty'])
-                    supabase.table("inventory_db").update({"Stock": int(new_stock)}).eq("Item_Code", target_item['Item_Code']).execute()
+                    selected_bill_group = tx_to_void_display.split(" | ")[0]
                     
-                    supabase.table("transaction_log").update({"Status": "Voided (ยกเลิก)"}).eq("TxID", tx_to_void).execute()
+                    # ค้นหาทุกรายการในฐานข้อมูลที่รหัสบิลขึ้นต้นด้วย Group นี้
+                    tx_to_cancel = transaction_df[
+                        (transaction_df['TxID'].apply(lambda x: str(x).split('-')[0]) == selected_bill_group) & 
+                        (transaction_df['Status'] == 'Completed')
+                    ]
                     
-                    st.success(f"✅ ยกเลิกรายการ {tx_to_void} และคืนสต๊อกเรียบร้อยแล้ว")
+                    for _, tx_data in tx_to_cancel.iterrows():
+                        target_item = inventory_df[inventory_df['Item_Name'] == tx_data['Item_Name']].iloc[0]
+                        
+                        # คืนสต๊อกทีละชิ้น
+                        new_stock = target_item['Stock'] + int(tx_data['Qty']) if tx_data['Action'] == "เบิกออก" else target_item['Stock'] - int(tx_data['Qty'])
+                        supabase.table("inventory_db").update({"Stock": int(new_stock)}).eq("Item_Code", target_item['Item_Code']).execute()
+                        
+                        # เปลี่ยนสถานะทีละชิ้น
+                        supabase.table("transaction_log").update({"Status": "Voided (ยกเลิก)"}).eq("TxID", tx_data['TxID']).execute()
+                        
+                    st.success(f"✅ ยกเลิกบิล {selected_bill_group} และคืนสต๊อกทั้งหมดเรียบร้อยแล้ว")
                     st.rerun()
