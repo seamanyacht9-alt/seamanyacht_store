@@ -66,6 +66,13 @@ cart_df = load_cart()
 po_cart_df = load_po_cart()
 po_log_df = load_po_log()
 
+if 'page_inv' not in st.session_state:
+    st.session_state.page_inv = 1
+if 'page_hist' not in st.session_state:
+    st.session_state.page_hist = 1
+if 'page_po_hist' not in st.session_state:
+    st.session_state.page_po_hist = 1
+
 def change_page_inv(delta):
     st.session_state.page_inv += delta
 
@@ -76,7 +83,7 @@ def change_page_po_hist(delta):
     st.session_state.page_po_hist += delta
 
 # ==========================================
-# เมนูด้านข้าง (แยกเมนูประวัติจัดซื้อออกมาแล้ว)
+# เมนูด้านข้าง
 # ==========================================
 st.sidebar.title("🛥️ ระบบจัดการอู่เรือ")
 menu = st.sidebar.radio("เมนูหลัก", [
@@ -615,15 +622,22 @@ elif menu == "📝 ประวัติ & ยกเลิกรายการ"
                         st.rerun()
 
 # ==========================================
-# หน้า 5: ประวัติการจัดซื้อ (PO History) ---> โค้ดส่วนที่เพิ่มมาใหม่
+# หน้า 5: ประวัติการจัดซื้อ (PO History) ---> อัปเดตเพิ่มระบบยกเลิกแล้ว
 # ==========================================
 elif menu == "📊 ประวัติการจัดซื้อ":
-    st.header("📊 ประวัติใบสั่งซื้อ (PO History)")
+    st.header("📊 ประวัติใบสั่งซื้อ (PO History) & ยกเลิกรายการ")
     
     if po_log_df.empty:
         st.info("ยังไม่มีประวัติการจัดซื้อในระบบ")
     else:
-        display_po_df = po_log_df.rename(columns={
+        # ฟิลเตอร์ซ่อนรายการที่ยกเลิกไปแล้ว
+        hide_voided_po = st.checkbox("👁️ ซ่อนรายการที่ยกเลิกไปแล้ว (Voided) จากตารางด้านล่าง", value=True)
+        
+        base_po_df = po_log_df.copy()
+        if hide_voided_po:
+            base_po_df = base_po_df[base_po_df['Status'] != 'Voided (ยกเลิก)']
+            
+        display_po_df = base_po_df.iloc[::-1].rename(columns={
             "TxID": "รหัสรายการ", "PO_ID": "เลขที่ PO", "Timestamp": "วันเวลา", 
             "Requester": "ผู้ขอซื้อ", "Item_Name": "รายการ", "Qty": "จำนวน", 
             "Unit": "หน่วย", "Price_Per_Unit": "ราคา/หน่วย", 
@@ -631,7 +645,7 @@ elif menu == "📊 ประวัติการจัดซื้อ":
             "Net_Price": "ราคาสุทธิ", "Shop_Name": "ร้านค้า", "Status": "สถานะ"
         })
         
-        # ระบบแบ่งหน้า (Pagination) สำหรับหน้า PO History
+        # ระบบแบ่งหน้า (Pagination)
         total_po_rows = len(display_po_df)
         total_po_pages = max(1, math.ceil(total_po_rows / 20))
         
@@ -668,3 +682,63 @@ elif menu == "📊 ประวัติการจัดซื้อ":
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
             type="primary"
         )
+        
+        st.markdown("---")
+        
+        # ---------------------------------------------
+        # โซน ยกเลิก (Void) และ ลบ (Hard Delete) สำหรับ PO
+        # ---------------------------------------------
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("⚠️ ยกเลิกรายการสั่งซื้อ (Void)")
+            st.caption("เปลี่ยนสถานะเป็นยกเลิก (ใช้เมื่อสั่งผิด หรือร้านไม่มีของ)")
+            valid_po_tx = po_log_df[po_log_df['Status'] != 'Voided (ยกเลิก)'].copy()
+            
+            if not valid_po_tx.empty:
+                void_po_mode = st.radio("เลือกโหมดการยกเลิก", ["ทีละรายการ", "เหมาทั้งบิล (PO)"], horizontal=True, key="po_void_mode")
+                
+                if void_po_mode == "ทีละรายการ":
+                    valid_po_tx['Display_Single'] = valid_po_tx.apply(lambda row: f"{row['TxID']} | {row['Item_Name']} ({row['Qty']} {row['Unit']})", axis=1)
+                    with st.form("void_single_po_form"):
+                        tx_to_void_display = st.selectbox("เลือกรายการ", valid_po_tx['Display_Single'], index=None, placeholder="🔍 พิมพ์รหัสรายการ หรือ ชื่อวัสดุ...")
+                        if st.form_submit_button("ยกเลิกรายการนี้"):
+                            if not tx_to_void_display:
+                                st.error("❌ กรุณาเลือกรายการก่อนกดตกลง")
+                            else:
+                                target_txid = tx_to_void_display.split(" | ")[0]
+                                supabase.table("po_log").update({"Status": "Voided (ยกเลิก)"}).eq("TxID", target_txid).execute()
+                                st.success(f"✅ ยกเลิกรายการ {target_txid} เรียบร้อย")
+                                st.rerun()
+
+                else:
+                    group_po_summary = valid_po_tx.groupby('PO_ID').agg({'Requester': 'first', 'Item_Name': 'count'}).reset_index()
+                    group_po_summary['Display_Bulk'] = group_po_summary.apply(lambda row: f"{row['PO_ID']} | ขอโดย: {row['Requester']} ({row['Item_Name']} รายการ)", axis=1)
+
+                    with st.form("void_bulk_po_form"):
+                        po_to_void_display = st.selectbox("เลือกบิล PO", group_po_summary['Display_Bulk'], index=None, placeholder="🔍 พิมพ์เลขที่ PO...")
+                        if st.form_submit_button("ยกเลิกทั้งบิล PO"):
+                            if not po_to_void_display:
+                                st.error("❌ กรุณาเลือกบิลก่อนกดตกลง")
+                            else:
+                                selected_po_group = po_to_void_display.split(" | ")[0]
+                                supabase.table("po_log").update({"Status": "Voided (ยกเลิก)"}).eq("PO_ID", selected_po_group).execute()
+                                st.success(f"✅ ยกเลิกบิล {selected_po_group} เรียบร้อย")
+                                st.rerun()
+
+        with col2:
+            st.subheader("🗑️ ลบประวัติถาวร (Hard Delete)")
+            st.caption("ลบข้อมูลออกจากฐานข้อมูลถาวร (สำหรับลบขยะ/ข้อมูลเทสต์)")
+            
+            po_log_df['Display_Del'] = po_log_df.apply(lambda row: f"{row['TxID']} | {row['Item_Name']} | {row['Status']}", axis=1)
+            
+            with st.form("hard_delete_po_form"):
+                tx_to_delete = st.selectbox("เลือกประวัติที่ต้องการลบทิ้ง", po_log_df['Display_Del'], index=None, placeholder="🔍 พิมพ์รหัส หรือ ชื่อวัสดุ...")
+                if st.form_submit_button("❌ ลบทิ้งถาวร"):
+                    if not tx_to_delete:
+                        st.error("❌ กรุณาเลือกรายการก่อนกดตกลง")
+                    else:
+                        target_txid = tx_to_delete.split(" | ")[0]
+                        supabase.table("po_log").delete().eq("TxID", target_txid).execute()
+                        st.success(f"✅ ลบประวัติ {target_txid} ถาวรแล้ว!")
+                        st.rerun()
