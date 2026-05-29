@@ -17,14 +17,22 @@ def init_connection():
 
 supabase = init_connection()
 
-# ฟังก์ชันดึงข้อมูลแบบ Real-time
+# ฟังก์ชันดึงข้อมูลแบบ Real-time (เพิ่มระบบดักจับ Error ให้โชว์หน้าเว็บ)
 def load_inventory():
-    res = supabase.table("inventory_db").select("*").order("id").execute()
-    return pd.DataFrame(res.data)
+    try:
+        res = supabase.table("inventory_db").select("*").order("id").execute()
+        return pd.DataFrame(res.data)
+    except Exception as e:
+        st.error(f"🚨 แจ้งเตือนจาก Supabase (inventory_db): {e}")
+        return pd.DataFrame()
 
 def load_transactions():
-    res = supabase.table("transaction_log").select("*").execute()
-    return pd.DataFrame(res.data)
+    try:
+        res = supabase.table("transaction_log").select("*").execute()
+        return pd.DataFrame(res.data)
+    except Exception as e:
+        st.error(f"🚨 แจ้งเตือนจาก Supabase (transaction_log): {e}")
+        return pd.DataFrame()
 
 # ดึงข้อมูลมาเก็บไว้ใช้งาน
 inventory_df = load_inventory()
