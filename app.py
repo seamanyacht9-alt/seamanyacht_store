@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import uuid
 from supabase import create_client, Client
 import io
@@ -47,7 +47,6 @@ transaction_df = load_transactions()
 if 'pending_cart' not in st.session_state:
     st.session_state.pending_cart = []
 
-# ฟังก์ชันช่วยเหลือสำหรับการเปลี่ยนหน้า
 def change_page_inv(delta):
     st.session_state.page_inv += delta
 
@@ -212,9 +211,6 @@ if menu == "📦 สต๊อกวัสดุ":
         cols = ["สถานะ", "รหัสวัสดุ", "ชื่อวัสดุ", "โซน/หมวดหมู่", "ยอดคงเหลือ", "ขั้นต่ำ"]
         display_inv_df = display_inv_df[cols]
 
-        # =========================================================
-        # --- ระบบแบ่งหน้าแบบมีปุ่ม (หน้าสต๊อกวัสดุ) ---
-        # =========================================================
         total_rows = len(display_inv_df)
         total_pages = max(1, math.ceil(total_rows / 20))
         
@@ -242,7 +238,6 @@ if menu == "📦 สต๊อกวัสดุ":
         with pg_col3:
             st.button("หน้าถัดไป ➡️", on_click=change_page_inv, args=(1,), disabled=(st.session_state.page_inv >= total_pages), use_container_width=True, key="next_inv")
         st.markdown("---")
-        # =========================================================
 
         excel_data_inv = to_excel(display_inv_df)
         st.download_button(
@@ -321,7 +316,10 @@ elif menu == "🛒 เบิก-รับของ (ตะกร้า)":
                             next_bill_num = nums.max() + 1
                     
                     bill_id = f"SMY_{next_bill_num:04d}" 
-                    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    
+                    # --- แก้ไขเวลาให้เป็นโซนประเทศไทย (UTC+7) ---
+                    tz_th = timezone(timedelta(hours=7))
+                    current_time = datetime.now(tz_th).strftime("%Y-%m-%d %H:%M:%S")
 
                     for idx, row in enumerate(st.session_state.pending_cart):
                         target_item = inventory_df[inventory_df['Item_Name'] == row['Item_Name']].iloc[0]
@@ -376,9 +374,6 @@ elif menu == "📝 ประวัติ & ยกเลิกรายการ 
             "Status": "สถานะ", "Boat_Name": "ชื่อเรือ"
         })
         
-        # =========================================================
-        # --- ระบบแบ่งหน้าแบบมีปุ่ม (หน้าประวัติ) ---
-        # =========================================================
         total_hist_rows = len(display_history_df)
         total_hist_pages = max(1, math.ceil(total_hist_rows / 20))
         
@@ -406,7 +401,6 @@ elif menu == "📝 ประวัติ & ยกเลิกรายการ 
         with pg_h3:
             st.button("หน้าถัดไป ➡️", on_click=change_page_hist, args=(1,), disabled=(st.session_state.page_hist >= total_hist_pages), use_container_width=True, key="next_hist")
         st.markdown("---")
-        # =========================================================
 
         excel_data_hist = to_excel(display_history_df) 
         st.download_button(
