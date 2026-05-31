@@ -6,7 +6,8 @@ from supabase import create_client
 import io
 import math
 
-st.set_page_config(page_title="Purchase & Supervisor", layout="wide")
+# เปลี่ยนชื่อ Title หน้าเว็บ
+st.set_page_config(page_title="Purchasing Department", layout="wide")
 
 @st.cache_resource
 def init_connection():
@@ -31,9 +32,11 @@ inventory_df = load_data("inventory_db")
 po_cart_df = load_data("po_cart_db")
 po_log_df = load_data("po_log")
 
-st.title("📋 แผนกจัดซื้อ และ คุมงาน")
+# เปลี่ยนหัวข้อใหญ่
+st.title("📋 แผนกจัดซื้อ")
 
-tab1, tab2, tab3 = st.tabs(["🛒 สร้างใบสั่งซื้อ (PO)", "📑 ประวัติจัดซื้อ & พิมพ์ PDF", "🛠️ จัดการบิล (ยกเลิก/ตีกลับ)"])
+# เพิ่ม Tab ที่ 3 สำหรับ "แก้ไขข้อมูลบิล" โดยเฉพาะ
+tab1, tab2, tab3, tab4 = st.tabs(["🛒 สร้างใบสั่งซื้อ (PO)", "📑 ประวัติจัดซื้อ & พิมพ์ PDF", "✏️ แก้ไขข้อมูลบิล", "🛠️ จัดการบิล (ยกเลิก/ตีกลับ)"])
 
 # ==========================================
 # TAB 1: สร้างใบสั่งซื้อ (PO)
@@ -170,10 +173,8 @@ with tab2:
                     .signature-box {{ page-break-inside: avoid; margin-top: 20px; }}
                     .btn-container {{ display: flex; justify-content: center; gap: 15px; margin-top: 20px; }}
                     .btn-print, .btn-download {{ padding: 10px 20px; color: white; text-decoration: none; border-radius: 5px; cursor: pointer; font-weight: bold; border: none; font-family: 'Sarabun', sans-serif; font-size: 14px; transition: 0.3s; }}
-                    .btn-print {{ background-color: #3182ce; }} 
-                    .btn-print:hover {{ background-color: #2b6cb0; }}
-                    .btn-download {{ background-color: #38a169; }}
-                    .btn-download:hover {{ background-color: #2f855a; }}
+                    .btn-print {{ background-color: #3182ce; }} .btn-print:hover {{ background-color: #2b6cb0; }}
+                    .btn-download {{ background-color: #38a169; }} .btn-download:hover {{ background-color: #2f855a; }}
                 </style>
             </head>
             <body>
@@ -248,8 +249,7 @@ with tab2:
                         }});
                     }}
                 </script>
-            </body>
-            </html>
+            </body></html>
             """
             components.html(html_invoice, height=650, scrolling=True)
 
@@ -259,14 +259,102 @@ with tab2:
         b_po_df = po_log_df.copy()
         if hide_voided_po: b_po_df = b_po_df[~b_po_df['Status'].isin(['Voided (ยกเลิก)', '❌ ตีกลับ (ขอเงินคืน)'])]
         
-        d_po_df = b_po_df.iloc[::-1].rename(columns={"TxID": "รหัส", "PO_ID": "PO", "Requester": "ผู้ขอ", "Item_Name": "รายการ", "Qty": "จำนวน", "Net_Price": "ราคาสุทธิ", "Shop_Name": "ร้านค้า", "Status": "สถานะ"})
-        st.dataframe(d_po_df[['รหัส', 'PO', 'ผู้ขอ', 'รายการ', 'จำนวน', 'ราคาสุทธิ', 'ร้านค้า', 'สถานะ']], use_container_width=True, hide_index=True)
+        if 'VAT' not in b_po_df.columns: b_po_df['VAT'] = 0
+        if 'Shipping' not in b_po_df.columns: b_po_df['Shipping'] = 0
+            
+        d_po_df = b_po_df.iloc[::-1].rename(columns={"TxID": "รหัส", "PO_ID": "PO", "Requester": "ผู้ขอ", "Item_Name": "รายการ", "Qty": "จำนวน", "Shipping":"ค่าส่ง", "Net_Price": "ราคาสุทธิ", "Shop_Name": "ร้านค้า", "Status": "สถานะ"})
+        
+        if 'page_po_hist' not in st.session_state: st.session_state.page_po_hist = 1
+        def change_page_po_hist(delta): st.session_state.page_po_hist += delta
+        
+        total_po_rows = len(d_po_df)
+        total_po_pages = max(1, math.ceil(total_po_rows / 20))
+        if st.session_state.page_po_hist > total_po_pages or st.session_state.page_po_hist < 1: st.session_state.page_po_hist = 1
+        start_po_idx = (st.session_state.page_po_hist - 1) * 20
+        end_po_idx = start_po_idx + 20
+        
+        st.dataframe(d_po_df.iloc[start_po_idx:end_po_idx][['รหัส', 'PO', 'ผู้ขอ', 'รายการ', 'จำนวน', 'ค่าส่ง', 'VAT', 'ราคาสุทธิ', 'ร้านค้า', 'สถานะ']], use_container_width=True, hide_index=True)
+        
+        pg_p1, pg_p2, pg_p3 = st.columns([1, 2, 1])
+        with pg_p1: st.button("⬅️ หน้าก่อนหน้า", on_click=change_page_po_hist, args=(-1,), disabled=(st.session_state.page_po_hist <= 1), use_container_width=True, key="prev_po")
+        with pg_p2: st.markdown(f"<div style='text-align: center; color: gray;'>แสดงรายการ {start_po_idx + 1 if total_po_rows > 0 else 0} - {min(end_po_idx, total_po_rows)}</div>", unsafe_allow_html=True)
+        with pg_p3: st.button("หน้าถัดไป ➡️", on_click=change_page_po_hist, args=(1,), disabled=(st.session_state.page_po_hist >= total_po_pages), use_container_width=True, key="next_po")
+        
         st.download_button("📥 ดาวน์โหลด Excel", data=to_excel(d_po_df), file_name="PO_History.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 # ==========================================
-# TAB 3: จัดการบิล
+# TAB 3: ✏️ แก้ไขข้อมูลบิล (ฟีเจอร์ใหม่)
 # ==========================================
 with tab3:
+    st.subheader("✏️ แก้ไขข้อมูลบิลสั่งซื้อ")
+    st.caption("ใช้แก้ไขกรณีคีย์ราคา, จำนวน, ค่าส่ง, หรือ VAT ผิดพลาด โดยไม่ต้องยกเลิกทั้งบิล")
+    
+    if po_log_df.empty:
+        st.info("ยังไม่มีประวัติการจัดซื้อ")
+    else:
+        # ดึงเฉพาะรายการที่ยังไม่ถูกยกเลิกมาแก้ไข
+        valid_edit_po = po_log_df[~po_log_df['Status'].isin(['Voided (ยกเลิก)', '❌ ตีกลับ (ขอเงินคืน)'])].copy()
+        
+        if not valid_edit_po.empty:
+            # สร้างตัวเลือกให้เห็นชัดๆ ว่ากำลังจะแก้รายการไหนของ PO ไหน
+            valid_edit_po['Display_Edit'] = valid_edit_po.apply(lambda r: f"{r['TxID']} | {r['Item_Name']} (PO: {r['PO_ID']})", axis=1)
+            
+            selected_edit_tx = st.selectbox("🔍 ค้นหา/เลือกรายการที่ต้องการแก้ไข", valid_edit_po['Display_Edit'].iloc[::-1], index=None, placeholder="พิมพ์ค้นหารหัสรายการ หรือ ชื่อวัสดุ...")
+            
+            if selected_edit_tx:
+                t_txid = selected_edit_tx.split(" | ")[0]
+                t_data = valid_edit_po[valid_edit_po['TxID'] == t_txid].iloc[0]
+                
+                with st.form("edit_po_form"):
+                    st.markdown(f"**กำลังแก้ไขรายการ:** {t_data['Item_Name']} *(สถานะปัจจุบัน: {t_data['Status']})*")
+                    
+                    c1, c2 = st.columns(2)
+                    e_requester = c1.text_input("ผู้ขอซื้อ / แผนก", value=t_data['Requester'])
+                    e_shop = c2.text_input("ร้านค้า", value=t_data['Shop_Name'])
+                    
+                    c3, c4 = st.columns(2)
+                    e_qty = c3.number_input("จำนวน", min_value=1, step=1, value=int(t_data['Qty']))
+                    e_price = c4.number_input("ราคา/หน่วย (บาท)", min_value=0.0, step=1.0, value=float(t_data['Price_Per_Unit']))
+                    
+                    c5, c6, c7 = st.columns(3)
+                    e_discount = c5.number_input("ส่วนลด (บาท)", min_value=0.0, step=1.0, value=float(t_data.get('Discount', 0)))
+                    e_shipping = c6.number_input("ค่าส่ง (บาท)", min_value=0.0, step=1.0, value=float(t_data.get('Shipping', 0)))
+                    e_vat = c7.number_input("ภาษี VAT (บาท)", min_value=0.0, step=1.0, value=float(t_data.get('VAT', 0)))
+                    
+                    if st.form_submit_button("💾 บันทึกการแก้ไข", type="primary", use_container_width=True):
+                        # 1. คำนวณราคาสุทธิใหม่
+                        e_net_price = (e_qty * e_price) - e_discount + e_shipping + e_vat
+                        
+                        # 2. เช็กว่ามีการแก้ "จำนวน" หรือไม่? ถ้าแก้ แล้วของรับเข้าคลังไปแล้ว ต้องปรับสต๊อกให้ตรงด้วย
+                        old_qty = int(t_data['Qty'])
+                        if t_data['Status'] == '✅ รับแล้ว (เข้าคลัง)' and e_qty != old_qty:
+                            qty_diff = e_qty - old_qty
+                            t_item = inventory_df[inventory_df['Item_Name'] == t_data['Item_Name']]
+                            if not t_item.empty:
+                                new_stock = t_item.iloc[0]['Stock'] + qty_diff
+                                supabase.table("inventory_db").update({"Stock": int(new_stock)}).eq("Item_Code", t_item.iloc[0]['Item_Code']).execute()
+                                
+                        # 3. อัปเดตข้อมูลลงฐานข้อมูลประวัติ PO
+                        supabase.table("po_log").update({
+                            "Requester": e_requester,
+                            "Shop_Name": e_shop,
+                            "Qty": int(e_qty),
+                            "Price_Per_Unit": float(e_price),
+                            "Discount": float(e_discount),
+                            "Shipping": float(e_shipping),
+                            "VAT": float(e_vat),
+                            "Net_Price": float(e_net_price)
+                        }).eq("TxID", t_txid).execute()
+                        
+                        st.success(f"✅ แก้ไขรายการ {t_txid} สำเร็จ! ราคาสุทธิใหม่คือ ฿{e_net_price:,.2f}")
+                        st.rerun()
+        else:
+            st.info("ไม่มีรายการที่สามารถแก้ไขได้ (อาจถูกยกเลิกไปหมดแล้ว)")
+
+# ==========================================
+# TAB 4: จัดการบิล (ยกเลิก / ตีกลับ)
+# ==========================================
+with tab4:
     st.subheader("🛠️ ยกเลิก หรือ ตีกลับสินค้า")
     c_ret, c_void = st.columns(2)
     
