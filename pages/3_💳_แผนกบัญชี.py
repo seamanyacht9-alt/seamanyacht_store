@@ -10,7 +10,7 @@ from PIL import Image
 st.set_page_config(page_title="Accounting Department", layout="wide")
 
 # 👇👇👇 วางลิงก์ Google Apps Script ของคุณตรงนี้ 👇👇👇
-GAS_URL = "https://script.google.com/macros/s/AKfycbxjjhzB-cQS7mFxFeCc8jNQ-Y-sx5SIwcfZk2ZD9vqkRjlKKr70F8v-dKEi1lwNKwLH/exec"
+GAS_URL = "วางลิงก์_WEB_APP_URL_ของคุณตรงนี้"
 # 👆👆👆👆👆👆👆👆👆👆👆👆👆👆👆👆👆👆👆👆👆👆👆👆
 
 @st.cache_resource
@@ -26,16 +26,13 @@ def load_data(table_name):
     except:
         return pd.DataFrame()
 
-# ฟังก์ชันบีบอัดรูปภาพก่อนส่งเข้า Google Drive (ลดเหลือ 50-100KB)
+# ฟังก์ชันบีบอัดรูปภาพ
 def compress_image(uploaded_file):
     img = Image.open(uploaded_file)
     if img.mode != 'RGB':
         img = img.convert('RGB')
     
-    # ย่อขนาดรูปให้ความกว้าง/ยาว ไม่เกิน 800px
     img.thumbnail((800, 800))
-    
-    # บีบอัดคุณภาพรูป
     output = io.BytesIO()
     img.save(output, format='JPEG', quality=60) 
     
@@ -56,15 +53,19 @@ with tab1:
     st.subheader("🧾 บันทึกค่าใช้จ่ายทั่วไป (เงินสดย่อย / บิลที่ไม่มี PO)")
     st.caption("อัปโหลดรูปบิลที่นี่ ระบบจะบีบอัดรูปอัตโนมัติและส่งไปเก็บใน Google Drive ให้ทันที")
     
-    col_f1, col_f2 = st.columns([1, 1])
+    col_f1, col_f2 = st.columns([1.2, 1])
     
     with col_f1:
         with st.form("receipt_upload_form", clear_on_submit=True):
             r_date = st.date_input("วันที่ในบิล")
             r_shop = st.text_input("ชื่อร้านค้า / ผู้รับเงิน *")
             
+            # --- แก้ไข: เพิ่มระบบกรอกหมวดหมู่เพิ่มเติม ---
+            c_cat1, c_cat2 = st.columns(2)
             categories = ["ค่าวัสดุ/อุปกรณ์", "ค่าแรงช่าง", "ค่าขนส่ง", "ค่าอาหาร/รับรอง", "ค่าใช้จ่ายเบ็ดเตล็ด", "อื่นๆ"]
-            r_category = st.selectbox("หมวดหมู่ค่าใช้จ่าย", categories)
+            r_category = c_cat1.selectbox("หมวดหมู่ค่าใช้จ่าย", categories)
+            r_custom_cat = c_cat2.text_input("พิมพ์หมวดหมู่ใหม่ (กรณีเลือก 'อื่นๆ')")
+            
             r_amount = st.number_input("จำนวนเงินรวม (บาท) *", min_value=0.0, step=1.0)
             r_note = st.text_input("หมายเหตุเพิ่มเติม (ถ้ามี)")
             
@@ -75,19 +76,22 @@ with tab1:
             submit_btn = st.form_submit_button("💾 บันทึกค่าใช้จ่าย & อัปโหลดรูป", type="primary", use_container_width=True)
             
             if submit_btn:
+                # จัดการหมวดหมู่
+                final_category = r_custom_cat.strip() if r_category == "อื่นๆ" else r_category
+                
                 if not r_shop or r_amount <= 0:
                     st.error("❌ กรุณากรอกชื่อร้านค้า และ จำนวนเงินให้ถูกต้อง")
+                elif r_category == "อื่นๆ" and not r_custom_cat.strip():
+                    st.error("❌ กรุณาพิมพ์ระบุหมวดหมู่ในช่อง 'พิมพ์หมวดหมู่ใหม่' ด้วยครับ")
                 elif not uploaded_file:
                     st.error("❌ กรุณาแนบรูปภาพบิล/สลิปโอนเงินด้วยครับ")
                 elif GAS_URL == "วางลิงก์_WEB_APP_URL_ของคุณตรงนี้":
-                    st.error("❌ ยังไม่ได้ใส่ลิงก์ Google Apps Script ในโค้ด `3_accounting.py` ครับ")
+                    st.error("❌ ยังไม่ได้ใส่ลิงก์ Google Apps Script ในโค้ดครับ")
                 else:
                     with st.spinner('กำลังบีบอัดรูปภาพและอัปโหลดไปที่ Google Drive... ⏳'):
                         try:
-                            # 1. บีบอัดรูป
                             base64_img = compress_image(uploaded_file)
                             
-                            # 2. ส่งไป Google Drive
                             payload = {
                                 "base64": base64_img,
                                 "filename": f"BILL_{r_date}_{r_shop}.jpg",
@@ -99,11 +103,10 @@ with tab1:
                             if res_data.get('status') == 'success':
                                 image_url = res_data.get('url')
                                 
-                                # 3. บันทึกลง Supabase
                                 supabase.table("accounting_receipts").insert({
                                     "Date": str(r_date),
                                     "Shop_Name": r_shop,
-                                    "Category": r_category,
+                                    "Category": final_category,
                                     "Amount": float(r_amount),
                                     "Note": r_note,
                                     "Receipt_URL": image_url
@@ -119,9 +122,16 @@ with tab1:
 
     with col_f2:
         st.info("💡 **รู้หรือไม่?** ระบบจะทำการย่อขนาดรูปภาพของคุณจากขนาดเต็ม (เช่น 3-5 MB) ให้เหลือเพียงประมาณ **50-100 KB** ก่อนส่งขึ้น Cloud เสมอ ทำให้คุณประหยัดพื้นที่จัดเก็บได้มากกว่า 50 เท่า!")
-        st.write("ล่าสุดคุณมีรายการค่าใช้จ่ายทั่วไปกี่บิลแล้ว?")
+        
+        st.write("📊 **สรุปยอดค่าใช้จ่ายทั่วไป (บิลที่ไม่มี PO)**")
+        
+        # --- แก้ไข: เพิ่มการโชว์ยอดเงินรวม ---
         total_receipts = len(receipts_df) if not receipts_df.empty else 0
-        st.metric("จำนวนบิลทั่วไปในระบบ", f"{total_receipts} บิล")
+        total_amount = receipts_df['Amount'].sum() if not receipts_df.empty else 0.0
+        
+        c_m1, c_m2 = st.columns(2)
+        c_m1.metric("จำนวนบิลในระบบ", f"{total_receipts} ใบ")
+        c_m2.metric("ยอดรวมทั้งหมด", f"฿ {total_amount:,.2f}")
 
 # ==========================================
 # TAB 2: จัดการหนี้ร้านค้า (จากใบ PO)
@@ -221,7 +231,6 @@ with tab3:
     if receipts_df.empty:
         st.info("ยังไม่มีประวัติการอัปโหลดบิลทั่วไป")
     else:
-        # แสดงตารางประวัติ
         display_receipts = receipts_df.sort_values(by='id', ascending=False).rename(columns={
             "Date": "วันที่", "Shop_Name": "ร้านค้า", "Category": "หมวดหมู่", "Amount": "ยอดเงิน", "Note": "หมายเหตุ"
         })
@@ -249,7 +258,7 @@ with tab3:
             except:
                 st.warning("⚠️ ไม่สามารถโหลดรูปพรีวิวได้ กรุณากดที่ลิงก์ด้านบนเพื่อดูรูป")
                 
-        # ฟีเจอร์ลบบิล (ลบในฐานข้อมูล)
+        # --- ฟีเจอร์ลบประวัติบิล ---
         with st.expander("🗑️ ลบประวัติค่าใช้จ่ายทั่วไป (ระวัง: ลบแล้วกู้คืนไม่ได้)"):
             with st.form("del_receipt_form"):
                 item_to_del = st.selectbox("เลือกลายการที่จะลบทิ้ง", receipts_df['Display_Select'], index=None)
@@ -257,5 +266,5 @@ with tab3:
                     if item_to_del:
                         target_id = receipts_df[receipts_df['Display_Select'] == item_to_del].iloc[0]['id']
                         supabase.table("accounting_receipts").delete().eq("id", int(target_id)).execute()
-                        st.success("✅ ลบข้อมูลออกจากฐานข้อมูลเรียบร้อยแล้ว (แต่ไฟล์รูปจะยังคงอยู่ใน Google Drive ของคุณเป็นแบ็กอัปครับ)")
+                        st.success("✅ ลบข้อมูลออกจากฐานข้อมูลเรียบร้อยแล้ว!")
                         st.rerun()
