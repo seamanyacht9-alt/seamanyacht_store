@@ -202,13 +202,13 @@ with tab2:
                             <th style="width: 5%;">ลำดับ</th>
                             <th style="width: 25%;">รายการสินค้า</th>
                             <th style="width: 10%;">ผู้ขอซื้อ</th>
-                            <th style="width: 14%;">ร้านค้า</th>
+                            <th style="width: 12%;">ร้านค้า</th>
                             <th style="width: 6%;">จำนวน</th>
                             <th style="width: 6%;">หน่วย</th>
                             <th style="width: 9%;">ราคา/หน่วย</th>
                             <th style="width: 7%;">ค่าส่ง</th>
                             <th style="width: 7%;">VAT</th>
-                            <th style="width: 11%;">ราคาสุทธิ</th>
+                            <th style="width: 13%;">ราคาสุทธิ</th>
                         </tr>
             """
             
