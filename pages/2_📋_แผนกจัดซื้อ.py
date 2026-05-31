@@ -6,7 +6,6 @@ from supabase import create_client
 import io
 import math
 
-# เปลี่ยนชื่อ Title หน้าเว็บ
 st.set_page_config(page_title="Purchasing Department", layout="wide")
 
 @st.cache_resource
@@ -32,10 +31,8 @@ inventory_df = load_data("inventory_db")
 po_cart_df = load_data("po_cart_db")
 po_log_df = load_data("po_log")
 
-# เปลี่ยนหัวข้อใหญ่
 st.title("📋 แผนกจัดซื้อ")
 
-# เพิ่ม Tab ที่ 3 สำหรับ "แก้ไขข้อมูลบิล" โดยเฉพาะ
 tab1, tab2, tab3, tab4 = st.tabs(["🛒 สร้างใบสั่งซื้อ (PO)", "📑 ประวัติจัดซื้อ & พิมพ์ PDF", "✏️ แก้ไขข้อมูลบิล", "🛠️ จัดการบิล (ยกเลิก/ตีกลับ)"])
 
 # ==========================================
@@ -46,7 +43,7 @@ with tab1:
     with col1:
         st.subheader("1. ข้อมูลบิล")
         with st.container(border=True):
-            requester = st.text_input("ชื่อผู้ขอซื้อ / แผนก", placeholder="เช่น พี่ต๋อง")
+            requester = st.text_input("ชื่อผู้ขอซื้อ / แผนก", placeholder="เช่น พี่ต๋อง, สโตร์")
             shop_name = st.text_input("ซื้อจากร้าน (ชื่อร้าน)", placeholder="พิมพ์ชื่อร้านค้า...")
 
         st.subheader("2. เพิ่มรายการลงใบสั่งซื้อ")
@@ -165,12 +162,13 @@ with tab2:
                     #invoice-content {{ padding: 10px; background-color: white; }}
                     h2 {{ text-align: center; color: #1a365d; margin-bottom: 5px; font-size: 22px; }}
                     .info-box {{ width: 100%; margin-bottom: 10px; border-bottom: 2px solid #ddd; padding-bottom: 5px; text-align: center; font-size: 14px; }}
-                    table {{ width: 100%; border-collapse: collapse; margin-top: 5px; font-size: 12px; }}
-                    th, td {{ border: 1px solid #ddd; padding: 4px 6px; text-align: left; }}
-                    th {{ background-color: #1a365d; color: white; text-align: center; padding: 6px; }}
-                    .total-row td {{ font-weight: bold; background-color: #f7fafc; padding: 8px; }}
+                    /* ลดฟอนต์ตารางเหลือ 11px เพื่อให้ 10 คอลัมน์ยัดลงพอดี */
+                    table {{ width: 100%; border-collapse: collapse; margin-top: 5px; font-size: 11px; }}
+                    th, td {{ border: 1px solid #ddd; padding: 4px 5px; text-align: left; word-wrap: break-word; }}
+                    th {{ background-color: #1a365d; color: white; text-align: center; padding: 5px; }}
+                    .total-row td {{ font-weight: bold; background-color: #f7fafc; padding: 6px; }}
                     .total-amt {{ color: #e53e3e; text-align: right; }}
-                    .signature-box {{ page-break-inside: avoid; margin-top: 20px; }}
+                    .signature-box {{ page-break-inside: avoid; margin-top: 20px; font-size: 13px; }}
                     .btn-container {{ display: flex; justify-content: center; gap: 15px; margin-top: 20px; }}
                     .btn-print, .btn-download {{ padding: 10px 20px; color: white; text-decoration: none; border-radius: 5px; cursor: pointer; font-weight: bold; border: none; font-family: 'Sarabun', sans-serif; font-size: 14px; transition: 0.3s; }}
                     .btn-print {{ background-color: #3182ce; }} .btn-print:hover {{ background-color: #2b6cb0; }}
@@ -183,17 +181,20 @@ with tab2:
                     <div class="info-box">
                         <strong>เลขที่เอกสาร:</strong> {selected_po_to_print} &nbsp;&nbsp;|&nbsp;&nbsp;
                         <strong>วันที่:</strong> {date_str} &nbsp;&nbsp;|&nbsp;&nbsp;
-                        <strong>ผู้ขอซื้อ:</strong> {po_data.iloc[0]['Requester']}
+                        <strong>ผู้ขอซื้อ:</strong> จัดซื้อ
                     </div>
                     <table>
                         <tr>
-                            <th style="width: 5%;">ลำดับ</th>
-                            <th style="width: 35%;">รายการสินค้า</th>
-                            <th style="width: 15%;">ร้านค้า</th>
-                            <th style="width: 8%;">จำนวน</th>
-                            <th style="width: 8%;">หน่วย</th>
-                            <th style="width: 12%;">ราคา/หน่วย</th>
-                            <th style="width: 12%;">ราคาสุทธิ</th>
+                            <th style="width: 4%;">ลำดับ</th>
+                            <th style="width: 20%;">รายการสินค้า</th>
+                            <th style="width: 12%;">ผู้ขอซื้อ</th>
+                            <th style="width: 12%;">ร้านค้า</th>
+                            <th style="width: 6%;">จำนวน</th>
+                            <th style="width: 6%;">หน่วย</th>
+                            <th style="width: 10%;">ราคา/หน่วย</th>
+                            <th style="width: 8%;">ค่าส่ง</th>
+                            <th style="width: 8%;">VAT</th>
+                            <th style="width: 14%;">ราคาสุทธิ</th>
                         </tr>
             """
             
@@ -204,11 +205,31 @@ with tab2:
                     m_item = inventory_df[inventory_df['Item_Name'] == row['Item_Name']]
                     if not m_item.empty: item_code_val = m_item.iloc[0]['Item_Code']
                 
-                html_invoice += f"<tr><td style='text-align: center;'>{counter}</td><td>[{item_code_val}] {row['Item_Name']}</td><td style='text-align: center;'>{row['Shop_Name']}</td><td style='text-align: center;'>{row['Qty']}</td><td style='text-align: center;'>{row['Unit']}</td><td style='text-align: right;'>{row['Price_Per_Unit']:,.2f}</td><td style='text-align: right;'>{row['Net_Price']:,.2f}</td></tr>"
+                req_val = row.get('Requester', '-')
+                ship_val = row.get('Shipping', 0)
+                vat_val = row.get('VAT', 0)
+                
+                html_invoice += f"""
+                        <tr>
+                            <td style='text-align: center;'>{counter}</td>
+                            <td>[{item_code_val}] {row['Item_Name']}</td>
+                            <td style='text-align: center;'>{req_val}</td>
+                            <td style='text-align: center;'>{row['Shop_Name']}</td>
+                            <td style='text-align: center;'>{row['Qty']}</td>
+                            <td style='text-align: center;'>{row['Unit']}</td>
+                            <td style='text-align: right;'>{row['Price_Per_Unit']:,.2f}</td>
+                            <td style='text-align: right;'>{ship_val:,.2f}</td>
+                            <td style='text-align: right;'>{vat_val:,.2f}</td>
+                            <td style='text-align: right;'>{row['Net_Price']:,.2f}</td>
+                        </tr>
+                """
                 counter += 1
                 
             html_invoice += f"""
-                        <tr class="total-row"><td colspan="6" style='text-align: right;'>ยอดรวมสุทธิ (Grand Total):</td><td class="total-amt">฿ {total_net:,.2f}</td></tr>
+                        <tr class="total-row">
+                            <td colspan="9" style='text-align: right;'>ยอดรวมสุทธิ (Grand Total):</td>
+                            <td class="total-amt">฿ {total_net:,.2f}</td>
+                        </tr>
                     </table>
                     
                     <table class="signature-box" style="width: 100%; border: none; text-align: center;">
@@ -283,7 +304,7 @@ with tab2:
         st.download_button("📥 ดาวน์โหลด Excel", data=to_excel(d_po_df), file_name="PO_History.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 # ==========================================
-# TAB 3: ✏️ แก้ไขข้อมูลบิล (ฟีเจอร์ใหม่)
+# TAB 3: ✏️ แก้ไขข้อมูลบิล
 # ==========================================
 with tab3:
     st.subheader("✏️ แก้ไขข้อมูลบิลสั่งซื้อ")
@@ -292,13 +313,10 @@ with tab3:
     if po_log_df.empty:
         st.info("ยังไม่มีประวัติการจัดซื้อ")
     else:
-        # ดึงเฉพาะรายการที่ยังไม่ถูกยกเลิกมาแก้ไข
         valid_edit_po = po_log_df[~po_log_df['Status'].isin(['Voided (ยกเลิก)', '❌ ตีกลับ (ขอเงินคืน)'])].copy()
         
         if not valid_edit_po.empty:
-            # สร้างตัวเลือกให้เห็นชัดๆ ว่ากำลังจะแก้รายการไหนของ PO ไหน
             valid_edit_po['Display_Edit'] = valid_edit_po.apply(lambda r: f"{r['TxID']} | {r['Item_Name']} (PO: {r['PO_ID']})", axis=1)
-            
             selected_edit_tx = st.selectbox("🔍 ค้นหา/เลือกรายการที่ต้องการแก้ไข", valid_edit_po['Display_Edit'].iloc[::-1], index=None, placeholder="พิมพ์ค้นหารหัสรายการ หรือ ชื่อวัสดุ...")
             
             if selected_edit_tx:
@@ -309,8 +327,8 @@ with tab3:
                     st.markdown(f"**กำลังแก้ไขรายการ:** {t_data['Item_Name']} *(สถานะปัจจุบัน: {t_data['Status']})*")
                     
                     c1, c2 = st.columns(2)
-                    e_requester = c1.text_input("ผู้ขอซื้อ / แผนก", value=t_data['Requester'])
-                    e_shop = c2.text_input("ร้านค้า", value=t_data['Shop_Name'])
+                    e_requester = c1.text_input("ผู้ขอซื้อ / แผนก", value=t_data.get('Requester', ''))
+                    e_shop = c2.text_input("ร้านค้า", value=t_data.get('Shop_Name', ''))
                     
                     c3, c4 = st.columns(2)
                     e_qty = c3.number_input("จำนวน", min_value=1, step=1, value=int(t_data['Qty']))
@@ -322,11 +340,9 @@ with tab3:
                     e_vat = c7.number_input("ภาษี VAT (บาท)", min_value=0.0, step=1.0, value=float(t_data.get('VAT', 0)))
                     
                     if st.form_submit_button("💾 บันทึกการแก้ไข", type="primary", use_container_width=True):
-                        # 1. คำนวณราคาสุทธิใหม่
                         e_net_price = (e_qty * e_price) - e_discount + e_shipping + e_vat
-                        
-                        # 2. เช็กว่ามีการแก้ "จำนวน" หรือไม่? ถ้าแก้ แล้วของรับเข้าคลังไปแล้ว ต้องปรับสต๊อกให้ตรงด้วย
                         old_qty = int(t_data['Qty'])
+                        
                         if t_data['Status'] == '✅ รับแล้ว (เข้าคลัง)' and e_qty != old_qty:
                             qty_diff = e_qty - old_qty
                             t_item = inventory_df[inventory_df['Item_Name'] == t_data['Item_Name']]
@@ -334,22 +350,16 @@ with tab3:
                                 new_stock = t_item.iloc[0]['Stock'] + qty_diff
                                 supabase.table("inventory_db").update({"Stock": int(new_stock)}).eq("Item_Code", t_item.iloc[0]['Item_Code']).execute()
                                 
-                        # 3. อัปเดตข้อมูลลงฐานข้อมูลประวัติ PO
                         supabase.table("po_log").update({
-                            "Requester": e_requester,
-                            "Shop_Name": e_shop,
-                            "Qty": int(e_qty),
-                            "Price_Per_Unit": float(e_price),
-                            "Discount": float(e_discount),
-                            "Shipping": float(e_shipping),
-                            "VAT": float(e_vat),
-                            "Net_Price": float(e_net_price)
+                            "Requester": e_requester, "Shop_Name": e_shop, "Qty": int(e_qty),
+                            "Price_Per_Unit": float(e_price), "Discount": float(e_discount),
+                            "Shipping": float(e_shipping), "VAT": float(e_vat), "Net_Price": float(e_net_price)
                         }).eq("TxID", t_txid).execute()
                         
                         st.success(f"✅ แก้ไขรายการ {t_txid} สำเร็จ! ราคาสุทธิใหม่คือ ฿{e_net_price:,.2f}")
                         st.rerun()
         else:
-            st.info("ไม่มีรายการที่สามารถแก้ไขได้ (อาจถูกยกเลิกไปหมดแล้ว)")
+            st.info("ไม่มีรายการที่สามารถแก้ไขได้")
 
 # ==========================================
 # TAB 4: จัดการบิล (ยกเลิก / ตีกลับ)
