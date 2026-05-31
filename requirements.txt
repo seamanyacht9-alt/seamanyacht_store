@@ -2,3 +2,5 @@ streamlit
 pandas
 supabase
 openpyxl
+Pillow
+requests
