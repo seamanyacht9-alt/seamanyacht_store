@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from supabase import create_client
 
-st.set_page_config(page_title="Shipyard Dashboard", layout="wide")
+st.set_page_config(page_title="SEAMAN-YACHT Dashboard", layout="wide")
 
 # ==========================================
 # 1. ตั้งค่าเชื่อมต่อ Supabase
@@ -32,7 +32,9 @@ po_log_df = load_data("po_log")
 # ==========================================
 st.sidebar.success("👆 เลือกระบบของแต่ละแผนกจากเมนูด้านบน")
 
-st.header("📊 แดชบอร์ดสรุปข้อมูลอู่เรือ")
+# --- เปลี่ยนหัวเว็บตามที่ขอ ---
+st.title("🛥️ SEAMAN-YACHT Dashboard")
+st.markdown("---")
 
 col1, col2, col3, col4 = st.columns(4)
 total_items = len(inventory_df) if not inventory_df.empty else 0
@@ -64,9 +66,10 @@ with col4:
 
 st.markdown("---")
 
-c_graph, c_alert = st.columns([2, 1])
+# ปรับคอลัมน์ให้แบ่งครึ่งเท่าๆ กัน สำหรับโชว์ 2 กราฟ
+c_graph1, c_graph2 = st.columns(2)
 
-with c_graph:
+with c_graph1:
     st.subheader("📈 ยอดการสั่งซื้อแยกตามร้านค้า")
     if not po_log_df.empty:
         valid_po = po_log_df[~po_log_df['Status'].isin(['Voided (ยกเลิก)', '❌ ตีกลับ (ขอเงินคืน)'])]
@@ -79,11 +82,31 @@ with c_graph:
     else:
         st.info("ยังไม่มีข้อมูลประวัติจัดซื้อ")
 
-with c_alert:
-    st.subheader("🚨 แจ้งเตือนของใกล้หมด")
-    if not inventory_df.empty and low_stock_count > 0:
-        low_stock_df = inventory_df[inventory_df['Stock'] <= inventory_df['Min_Stock']][['Item_Name', 'Stock', 'Min_Stock', 'Unit']]
-        st.dataframe(low_stock_df.rename(columns={"Item_Name":"ชื่อวัสดุ", "Stock":"คงเหลือ", "Min_Stock":"ขั้นต่ำ", "Unit":"หน่วย"}), hide_index=True, use_container_width=True)
-        st.error("กรุณาทำใบขอซื้อสำหรับรายการนี้โดยด่วน!")
+with c_graph2:
+    st.subheader("📅 สรุปยอดค่าใช้จ่ายรายเดือน")
+    if not po_log_df.empty:
+        # กรองเอาเฉพาะบิลที่ไม่ถูกยกเลิก
+        valid_po = po_log_df[~po_log_df['Status'].isin(['Voided (ยกเลิก)', '❌ ตีกลับ (ขอเงินคืน)'])].copy()
+        if not valid_po.empty:
+            # แปลง Timestamp เป็นรูปแบบ เดือน-ปี (เช่น 2026-05)
+            valid_po['Timestamp'] = pd.to_datetime(valid_po['Timestamp'])
+            valid_po['Month_Year'] = valid_po['Timestamp'].dt.strftime('%Y-%m')
+            
+            # รวมยอดเงินตามเดือน
+            monthly_spent = valid_po.groupby('Month_Year')['Net_Price'].sum().reset_index()
+            monthly_spent = monthly_spent.sort_values('Month_Year')
+            
+            # สร้างช่องเลือกเดือน เพื่อดูยอดเจาะจง (ตั้งค่าเริ่มต้นให้เป็นเดือนล่าสุด)
+            selected_month = st.selectbox("📌 เลือกระบุเดือนที่ต้องการดูยอด", monthly_spent['Month_Year'].tolist(), index=len(monthly_spent)-1)
+            
+            if selected_month:
+                month_total = monthly_spent[monthly_spent['Month_Year'] == selected_month]['Net_Price'].values[0]
+                st.markdown(f"<h3 style='color: #2e7d32;'>ยอดรวมเดือน {selected_month}: ฿ {month_total:,.2f}</h3>", unsafe_allow_html=True)
+            
+            # สร้างกราฟแท่งรายเดือน
+            chart_data = monthly_spent.set_index('Month_Year')
+            st.bar_chart(chart_data)
+        else:
+            st.info("ยังไม่มีข้อมูลสำหรับสร้างกราฟรายเดือน")
     else:
-        st.success("✅ สต๊อกวัสดุทุกรายการอยู่ในเกณฑ์ปกติ")
+        st.info("ยังไม่มีข้อมูลประวัติจัดซื้อ")
