@@ -156,7 +156,6 @@ with tab2:
             <head>
                 <meta charset="UTF-8">
                 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap" rel="stylesheet">
-                <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
                 <style>
                     body {{ font-family: 'Sarabun', 'Tahoma', sans-serif; color: #333; padding: 10px; background-color: white; line-height: 1.4; }}
                     #invoice-content {{ padding: 10px; background-color: white; }}
@@ -171,9 +170,8 @@ with tab2:
                     .signature-box {{ page-break-inside: avoid; margin-top: 20px; font-size: 13px; }}
                     
                     .btn-container {{ display: flex; justify-content: center; gap: 15px; margin-top: 20px; }}
-                    .btn-print, .btn-download {{ padding: 10px 20px; color: white; text-decoration: none; border-radius: 5px; cursor: pointer; font-weight: bold; border: none; font-family: inherit; font-size: 15px; transition: 0.3s; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }}
-                    .btn-print {{ background-color: #3182ce; }} .btn-print:hover {{ background-color: #2b6cb0; transform: translateY(-2px); }}
-                    .btn-download {{ background-color: #38a169; }} .btn-download:hover {{ background-color: #2f855a; transform: translateY(-2px); }}
+                    .btn-print {{ padding: 12px 30px; color: white; background-color: #3182ce; text-decoration: none; border-radius: 5px; cursor: pointer; font-weight: bold; border: none; font-family: inherit; font-size: 16px; transition: 0.3s; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }}
+                    .btn-print:hover {{ background-color: #2b6cb0; transform: translateY(-2px); }}
                     
                     /* ========================================= */
                     /* เวทมนตร์จัดการหน้า Print ลบ URL/วันที่ ทิ้ง! */
@@ -181,10 +179,10 @@ with tab2:
                     @media print {{
                         @page {{ 
                             size: A4 portrait;
-                            margin: 0; 
+                            margin: 0; /* การตั้ง margin 0 จะปิด Header/Footer (URL/Date) อัตโนมัติ */
                         }}
                         body {{ 
-                            margin: 1.5cm; 
+                            margin: 1.5cm; /* ขยับเนื้อหาลงมาให้อยู่ในระยะขอบกระดาษที่สวยงาม */
                             padding: 0; 
                         }}
                         .btn-container {{ display: none !important; }}
@@ -258,26 +256,9 @@ with tab2:
                 
                 <div class="btn-container">
                     <button class="btn-print" onclick="nativePrint()">🖨️ พิมพ์ / บันทึกเป็น PDF</button>
-                    <button class="btn-download" onclick="downloadPDF()">📥 ดาวน์โหลดไฟล์ PDF</button>
                 </div>
 
                 <script>
-                    function getPDFOptions() {{
-                        return {{
-                            margin:       10,
-                            filename:     '{selected_po_to_print}.pdf',
-                            image:        {{ type: 'jpeg', quality: 1.0 }},
-                            html2canvas:  {{ scale: 2, useCORS: true, scrollY: 0 }},
-                            jsPDF:        {{ unit: 'mm', format: 'a4', orientation: 'portrait' }}
-                        }};
-                    }}
-
-                    function downloadPDF() {{
-                        window.scrollTo(0, 0);
-                        var element = document.getElementById('invoice-content');
-                        html2pdf().set(getPDFOptions()).from(element).save();
-                    }}
-
                     function nativePrint() {{
                         window.print();
                     }}
