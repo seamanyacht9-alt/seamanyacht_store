@@ -157,13 +157,13 @@ with tab2:
                 <meta charset="UTF-8">
                 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap" rel="stylesheet">
                 <style>
-                    body {{ font-family: 'Tahoma', sans-serif; color: #333; padding: 10px; background-color: white; line-height: 1.3; }}
+                    body {{ font-family: 'Tahoma', sans-serif; color: #333; padding: 10px; background-color: white; line-height: 1.2; }}
                     #invoice-content {{ padding: 10px; background-color: white; }}
                     h2 {{ text-align: center; color: #1a365d; margin-bottom: 5px; font-size: 22px; }}
                     .info-box {{ width: 100%; margin-bottom: 10px; border-bottom: 2px solid #ddd; padding-bottom: 5px; text-align: center; font-size: 14px; }}
                     
-                    table {{ width: 100%; border-collapse: collapse; margin-top: 5px; font-size: 11px; }}
-                    th, td {{ border: 1px solid #ddd; padding: 5px; text-align: left; word-wrap: break-word; }}
+                    table {{ width: 100%; border-collapse: collapse; margin-top: 5px; font-size: 10.5px; }}
+                    th, td {{ border: 1px solid #ddd; padding: 4px; text-align: left; word-wrap: break-word; }}
                     th {{ background-color: #1a365d; color: white; text-align: center; padding: 6px; }}
                     .total-row td {{ font-weight: bold; background-color: #f7fafc; padding: 8px; }}
                     .total-amt {{ color: #e53e3e; text-align: right; }}
