@@ -158,13 +158,11 @@ with tab2:
                 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap" rel="stylesheet">
                 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
                 <style>
-                    /* ใส่ฟอนต์สำรอง Tahoma เผื่อกรณี html2pdf โหลดฟอนต์หลักไม่ทัน */
                     body {{ font-family: 'Sarabun', 'Tahoma', sans-serif; color: #333; padding: 10px; background-color: white; line-height: 1.4; }}
                     #invoice-content {{ padding: 10px; background-color: white; }}
                     h2 {{ text-align: center; color: #1a365d; margin-bottom: 5px; font-size: 22px; }}
                     .info-box {{ width: 100%; margin-bottom: 10px; border-bottom: 2px solid #ddd; padding-bottom: 5px; text-align: center; font-size: 14px; }}
                     
-                    /* ปรับสัดส่วนตารางให้พอดี */
                     table {{ width: 100%; border-collapse: collapse; margin-top: 5px; font-size: 11.5px; }}
                     th, td {{ border: 1px solid #ddd; padding: 5px; text-align: left; word-wrap: break-word; }}
                     th {{ background-color: #1a365d; color: white; text-align: center; padding: 6px; }}
@@ -172,17 +170,24 @@ with tab2:
                     .total-amt {{ color: #e53e3e; text-align: right; }}
                     .signature-box {{ page-break-inside: avoid; margin-top: 20px; font-size: 13px; }}
                     
-                    /* ปุ่มกด */
                     .btn-container {{ display: flex; justify-content: center; gap: 15px; margin-top: 20px; }}
                     .btn-print, .btn-download {{ padding: 10px 20px; color: white; text-decoration: none; border-radius: 5px; cursor: pointer; font-weight: bold; border: none; font-family: inherit; font-size: 14px; transition: 0.3s; }}
                     .btn-print {{ background-color: #3182ce; }} .btn-print:hover {{ background-color: #2b6cb0; }}
                     .btn-download {{ background-color: #38a169; }} .btn-download:hover {{ background-color: #2f855a; }}
                     
-                    /* ซ่อนปุ่มเวลากดปริ้นแบบ Native */
+                    /* ========================================= */
+                    /* เวทมนตร์จัดการหน้า Print ลบ URL/วันที่ ทิ้ง! */
+                    /* ========================================= */
                     @media print {{
+                        @page {{ 
+                            size: A4 portrait;
+                            margin: 0; /* การตั้ง margin 0 จะเป็นการปิด Header/Footer (URL/Date) อัตโนมัติ */
+                        }}
+                        body {{ 
+                            margin: 1.5cm; /* ขยับเนื้อหาลงมาให้อยู่ในระยะขอบกระดาษที่สวยงาม */
+                            padding: 0; 
+                        }}
                         .btn-container {{ display: none !important; }}
-                        @page {{ margin: 10mm; }}
-                        body {{ padding: 0; }}
                     }}
                 </style>
             </head>
@@ -253,35 +258,33 @@ with tab2:
                 
                 <div class="btn-container">
                     <button class="btn-print" onclick="nativePrint()">🖨️ เปิดดู / พิมพ์ (Print)</button>
-                    <button class="btn-download" onclick="downloadPDF()">📥 ดาวน์โหลด PDF</button>
+                    <button class="btn-download" onclick="downloadPDF()" style="background-color: #718096;">📥 โหลดด้วยปลั๊กอิน</button>
                 </div>
 
                 <script>
                     function getPDFOptions() {{
                         return {{
-                            margin:       [5, 5, 5, 5],
+                            margin:       10,
                             filename:     '{selected_po_to_print}.pdf',
                             image:        {{ type: 'jpeg', quality: 1.0 }},
-                            html2canvas:  {{ scale: 2, useCORS: true, scrollY: 0, windowY: 0 }},
+                            html2canvas:  {{ scale: 2, useCORS: true, scrollY: 0 }},
                             jsPDF:        {{ unit: 'mm', format: 'a4', orientation: 'portrait' }}
                         }};
                     }}
 
-                    // ดาวน์โหลดผ่านปลั๊กอิน (มีโอกาสภาษาไทยเพี้ยน)
                     function downloadPDF() {{
                         window.scrollTo(0, 0);
                         var element = document.getElementById('invoice-content');
                         html2pdf().set(getPDFOptions()).from(element).save();
                     }}
 
-                    // ใช้ระบบ Print ของเบราว์เซอร์ (ภาษาไทยสมบูรณ์ 100%)
                     function nativePrint() {{
                         window.print();
                     }}
                 </script>
             </body></html>
             """
-            components.html(html_invoice, height=650, scrolling=True)
+            components.html(html_invoice, height=750, scrolling=True)
 
         st.markdown("---")
         st.subheader("📋 ตารางประวัติการสั่งซื้อ (PO)")
