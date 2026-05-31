@@ -158,21 +158,32 @@ with tab2:
                 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap" rel="stylesheet">
                 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
                 <style>
-                    body {{ font-family: 'Sarabun', sans-serif; color: #333; padding: 10px; background-color: white; }}
+                    /* ใส่ฟอนต์สำรอง Tahoma เผื่อกรณี html2pdf โหลดฟอนต์หลักไม่ทัน */
+                    body {{ font-family: 'Sarabun', 'Tahoma', sans-serif; color: #333; padding: 10px; background-color: white; line-height: 1.4; }}
                     #invoice-content {{ padding: 10px; background-color: white; }}
                     h2 {{ text-align: center; color: #1a365d; margin-bottom: 5px; font-size: 22px; }}
                     .info-box {{ width: 100%; margin-bottom: 10px; border-bottom: 2px solid #ddd; padding-bottom: 5px; text-align: center; font-size: 14px; }}
-                    /* ลดฟอนต์ตารางเหลือ 11px เพื่อให้ 10 คอลัมน์ยัดลงพอดี */
-                    table {{ width: 100%; border-collapse: collapse; margin-top: 5px; font-size: 11px; }}
-                    th, td {{ border: 1px solid #ddd; padding: 4px 5px; text-align: left; word-wrap: break-word; }}
-                    th {{ background-color: #1a365d; color: white; text-align: center; padding: 5px; }}
-                    .total-row td {{ font-weight: bold; background-color: #f7fafc; padding: 6px; }}
+                    
+                    /* ปรับสัดส่วนตารางให้พอดี */
+                    table {{ width: 100%; border-collapse: collapse; margin-top: 5px; font-size: 11.5px; }}
+                    th, td {{ border: 1px solid #ddd; padding: 5px; text-align: left; word-wrap: break-word; }}
+                    th {{ background-color: #1a365d; color: white; text-align: center; padding: 6px; }}
+                    .total-row td {{ font-weight: bold; background-color: #f7fafc; padding: 8px; }}
                     .total-amt {{ color: #e53e3e; text-align: right; }}
                     .signature-box {{ page-break-inside: avoid; margin-top: 20px; font-size: 13px; }}
+                    
+                    /* ปุ่มกด */
                     .btn-container {{ display: flex; justify-content: center; gap: 15px; margin-top: 20px; }}
-                    .btn-print, .btn-download {{ padding: 10px 20px; color: white; text-decoration: none; border-radius: 5px; cursor: pointer; font-weight: bold; border: none; font-family: 'Sarabun', sans-serif; font-size: 14px; transition: 0.3s; }}
+                    .btn-print, .btn-download {{ padding: 10px 20px; color: white; text-decoration: none; border-radius: 5px; cursor: pointer; font-weight: bold; border: none; font-family: inherit; font-size: 14px; transition: 0.3s; }}
                     .btn-print {{ background-color: #3182ce; }} .btn-print:hover {{ background-color: #2b6cb0; }}
                     .btn-download {{ background-color: #38a169; }} .btn-download:hover {{ background-color: #2f855a; }}
+                    
+                    /* ซ่อนปุ่มเวลากดปริ้นแบบ Native */
+                    @media print {{
+                        .btn-container {{ display: none !important; }}
+                        @page {{ margin: 10mm; }}
+                        body {{ padding: 0; }}
+                    }}
                 </style>
             </head>
             <body>
@@ -185,16 +196,16 @@ with tab2:
                     </div>
                     <table>
                         <tr>
-                            <th style="width: 4%;">ลำดับ</th>
-                            <th style="width: 20%;">รายการสินค้า</th>
-                            <th style="width: 12%;">ผู้ขอซื้อ</th>
-                            <th style="width: 12%;">ร้านค้า</th>
+                            <th style="width: 5%;">ลำดับ</th>
+                            <th style="width: 25%;">รายการสินค้า</th>
+                            <th style="width: 10%;">ผู้ขอซื้อ</th>
+                            <th style="width: 14%;">ร้านค้า</th>
                             <th style="width: 6%;">จำนวน</th>
                             <th style="width: 6%;">หน่วย</th>
-                            <th style="width: 10%;">ราคา/หน่วย</th>
-                            <th style="width: 8%;">ค่าส่ง</th>
-                            <th style="width: 8%;">VAT</th>
-                            <th style="width: 14%;">ราคาสุทธิ</th>
+                            <th style="width: 9%;">ราคา/หน่วย</th>
+                            <th style="width: 7%;">ค่าส่ง</th>
+                            <th style="width: 7%;">VAT</th>
+                            <th style="width: 11%;">ราคาสุทธิ</th>
                         </tr>
             """
             
@@ -241,7 +252,7 @@ with tab2:
                 </div>
                 
                 <div class="btn-container">
-                    <button class="btn-print" onclick="printPDF()">🖨️ เปิดดู / พิมพ์ (Print)</button>
+                    <button class="btn-print" onclick="nativePrint()">🖨️ เปิดดู / พิมพ์ (Print)</button>
                     <button class="btn-download" onclick="downloadPDF()">📥 ดาวน์โหลด PDF</button>
                 </div>
 
@@ -256,18 +267,16 @@ with tab2:
                         }};
                     }}
 
+                    // ดาวน์โหลดผ่านปลั๊กอิน (มีโอกาสภาษาไทยเพี้ยน)
                     function downloadPDF() {{
                         window.scrollTo(0, 0);
                         var element = document.getElementById('invoice-content');
                         html2pdf().set(getPDFOptions()).from(element).save();
                     }}
 
-                    function printPDF() {{
-                        window.scrollTo(0, 0); 
-                        var element = document.getElementById('invoice-content');
-                        html2pdf().set(getPDFOptions()).from(element).outputPdf('bloburl').then(function(pdfUrl) {{
-                            window.open(pdfUrl, '_blank');
-                        }});
+                    // ใช้ระบบ Print ของเบราว์เซอร์ (ภาษาไทยสมบูรณ์ 100%)
+                    function nativePrint() {{
+                        window.print();
                     }}
                 </script>
             </body></html>
