@@ -157,12 +157,12 @@ with tab2:
                 <meta charset="UTF-8">
                 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap" rel="stylesheet">
                 <style>
-                    body {{ font-family: 'Sarabun', 'Tahoma', sans-serif; color: #333; padding: 10px; background-color: white; line-height: 1.4; }}
+                    body {{ font-family: 'Tahoma', sans-serif; color: #333; padding: 10px; background-color: white; line-height: 1.3; }}
                     #invoice-content {{ padding: 10px; background-color: white; }}
                     h2 {{ text-align: center; color: #1a365d; margin-bottom: 5px; font-size: 22px; }}
                     .info-box {{ width: 100%; margin-bottom: 10px; border-bottom: 2px solid #ddd; padding-bottom: 5px; text-align: center; font-size: 14px; }}
                     
-                    table {{ width: 100%; border-collapse: collapse; margin-top: 5px; font-size: 11.5px; }}
+                    table {{ width: 100%; border-collapse: collapse; margin-top: 5px; font-size: 11px; }}
                     th, td {{ border: 1px solid #ddd; padding: 5px; text-align: left; word-wrap: break-word; }}
                     th {{ background-color: #1a365d; color: white; text-align: center; padding: 6px; }}
                     .total-row td {{ font-weight: bold; background-color: #f7fafc; padding: 8px; }}
@@ -182,7 +182,7 @@ with tab2:
                             margin: 0; /* การตั้ง margin 0 จะปิด Header/Footer (URL/Date) อัตโนมัติ */
                         }}
                         body {{ 
-                            margin: 1.5cm; /* ขยับเนื้อหาลงมาให้อยู่ในระยะขอบกระดาษที่สวยงาม */
+                            margin: 1cm; /* ขยับเนื้อหาลงมาให้อยู่ในระยะขอบกระดาษที่สวยงาม */
                             padding: 0; 
                         }}
                         .btn-container {{ display: none !important; }}
